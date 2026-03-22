@@ -41,13 +41,14 @@ import {
   inferNpcPoseKey,
   createDialogueTurn
 } from "./actions/dialogueActions";
-import type { ActionResult, GameStateData, LocationId, NpcId } from "../types/game";
+import type { ActionResult, DialogueQuestionId, GameStateData, LocationId, NpcId } from "../types/game";
 
 type MoveAction = { type: "MOVE"; target: LocationId };
 type ForceMoveAction = { type: "FORCE_MOVE"; target: LocationId };
 type GameAction =
   | MoveAction
   | ForceMoveAction
+  | { type: "SET_ONE_NPC_SCENE_MODE"; enabled: boolean }
   | { type: "RESET_GAME" }
   | { type: "SET_TIMER_PAUSED"; paused: boolean }
   | { type: "COMPLETE_ORIENTATION_INTRO"; preferredName?: string }
@@ -132,6 +133,16 @@ const MOVE_TIME_COST_SEC = {
   withMap: 8,
   base: 12
 } as const;
+
+type QuestionGateDefinition = {
+  id: DialogueQuestionId;
+  opener: string;
+  choices: string[];
+  validate: (input: string) => boolean;
+  successReply: string;
+  failReply: string;
+  successEvent: string;
+};
 
 function extractPlayerName(rawInput: string): string | null {
   return extractPlayerNameAction(rawInput);
@@ -268,6 +279,62 @@ function defaultDialogueSpeaker(npcId: NpcId): string {
   return formatNpcName(npcId);
 }
 
+function createIdleDialogueSession(): GameStateData["dialogue"]["session"] {
+  return {
+    npcId: null,
+    status: "idle",
+    mode: "tone_reply",
+    questionChoices: []
+  };
+}
+
+function normalizeAnswerKey(input: string): string {
+  return String(input || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function resolveQuestionGate(state: GameStateData, npcId: NpcId): QuestionGateDefinition | null {
+  if (
+    npcId === "eggman"
+    && state.player.location === "eggman_classroom"
+    && state.player.inventory.includes("Student ID")
+    && !state.world.events.includes("QUESTION_GATE::eggman_route_quiz::passed")
+  ) {
+    return {
+      id: "eggman_route_quiz",
+      opener: "Pop quiz, underachiever: what move actually saves clock during hunt routing?",
+      choices: [
+        "Camp Sorority and wait for Sonic.",
+        "Use Quad as a transit hub and rotate quickly.",
+        "Stay in one room and spam dialogue."
+      ],
+      validate: (input) => /quad.*transit|transit.*quad|rotate.*quick|move.*quick/i.test(input),
+      successReply: "Correct. Direct clue: route through Quad, then sweep Cafeteria or Dorm Hall for live Sonic intel.",
+      failReply: "Wrong. You are roleplaying a loading screen. Direct clue withheld until you answer cleanly next time.",
+      successEvent: "QUESTION_GATE::eggman_route_quiz::passed"
+    };
+  }
+  if (
+    npcId === "thunderhead"
+    && state.player.location === "tunnel"
+    && !state.world.events.includes("QUESTION_GATE::thunderhead_trade_quiz::passed")
+  ) {
+    return {
+      id: "thunderhead_trade_quiz",
+      opener: "Tunnel check: which item actually clears my Asswine trade gate?",
+      choices: [
+        "Hairbrush",
+        "Sorority Mascara",
+        "Fake ID Wristband"
+      ],
+      validate: (input) => /sorority.*mascara|mascara/i.test(input),
+      successReply: "Bingo. Direct clue: Lace Undies, Sorority Mascara, or Sorority Composite all clear the tunnel trade.",
+      failReply: "Nope. Cute guess, zero bottle. Bring real sorority contraband if you want progress.",
+      successEvent: "QUESTION_GATE::thunderhead_trade_quiz::passed"
+    };
+  }
+  return null;
+}
+
 function clampDialogueForDisplay(npcId: NpcId, rawText: string): string {
   const normalized = String(rawText || "").replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -334,6 +401,19 @@ export function useGameController(): {
       if (!initial.dialogue.npcMemory || typeof initial.dialogue.npcMemory !== "object") {
         initial.dialogue.npcMemory = {};
       }
+      if (!initial.dialogue.session || typeof initial.dialogue.session !== "object") {
+        initial.dialogue.session = createIdleDialogueSession();
+      } else {
+        initial.dialogue.session = {
+          npcId: initial.dialogue.session.npcId ?? null,
+          status: initial.dialogue.session.status ?? "idle",
+          mode: initial.dialogue.session.mode ?? "tone_reply",
+          questionId: initial.dialogue.session.questionId,
+          questionChoices: Array.isArray(initial.dialogue.session.questionChoices)
+            ? initial.dialogue.session.questionChoices.slice(0, 3)
+            : []
+        };
+      }
       initial.sonic.patience = Number.isFinite(initial.sonic.patience) ? Math.max(0, Math.min(2, Number(initial.sonic.patience))) : 2;
       initial.sonic.cooldownMoves = Number.isFinite(initial.sonic.cooldownMoves) ? Math.max(0, Number(initial.sonic.cooldownMoves)) : 0;
       if (!initial.world.visitCounts) {
@@ -396,6 +476,12 @@ export function useGameController(): {
         fratBanned: Boolean(existingRestrictions.fratBanned),
         fratChallengeForced: Boolean(existingRestrictions.fratChallengeForced),
         fratLastSafeLocation: existingRestrictions.fratLastSafeLocation ?? "quad"
+      };
+      const existingSettings = (initial.world as GameStateData["world"] & {
+        settings?: { oneNpcPerScene?: boolean };
+      }).settings ?? {};
+      initial.world.settings = {
+        oneNpcPerScene: existingSettings.oneNpcPerScene !== false
       };
       const existingAnalytics = (initial.world as GameStateData["world"] & {
         analytics?: { soggyBiscuitTriggered?: boolean };
@@ -578,6 +664,20 @@ export function useGameController(): {
           result = { ok: true, message: action.paused ? "Timer paused." : "Timer resumed." };
           return;
         }
+        case "SET_ONE_NPC_SCENE_MODE": {
+          state.world.settings.oneNpcPerScene = action.enabled;
+          const world = director.updateWorld(state);
+          state.world.intents = world.intents;
+          state.world.presentNpcs = world.presentNpcs;
+          syncSonicLocation(state);
+          result = {
+            ok: true,
+            message: action.enabled
+              ? "One-NPC scene mode enabled."
+              : "One-NPC scene mode disabled."
+          };
+          return;
+        }
         case "COMPLETE_ORIENTATION_INTRO": {
           const preferredName = action.preferredName?.trim();
           if (preferredName) {
@@ -589,6 +689,7 @@ export function useGameController(): {
           state.mission.objective = MISSION_OBJECTIVE;
           state.mission.subObjective = MISSION_SUBOBJECTIVE;
           state.dialogue.turns = [];
+          state.dialogue.session = createIdleDialogueSession();
           state.world.actionUnlocks.searchQuad = true;
           state.world.actionUnlocks.searchDeanDesk = true;
           state.world.actionUnlocks.searchFratHouse = true;
@@ -614,6 +715,7 @@ export function useGameController(): {
           }
           state.player.location = destination;
           state.world.visitCounts[destination] = (state.world.visitCounts[destination] ?? 0) + 1;
+          state.dialogue.session = createIdleDialogueSession();
           result = { ok: true, message: `Moved to ${destination}.` };
           return;
         }
@@ -639,6 +741,7 @@ export function useGameController(): {
           state.player.location = action.target;
           state.world.visitCounts[action.target] = (state.world.visitCounts[action.target] ?? 0) + 1;
           state.dialogue.turns = [];
+          state.dialogue.session = createIdleDialogueSession();
           const travelCost = state.player.inventory.includes("Campus Map")
             ? MOVE_TIME_COST_SEC.withMap
             : MOVE_TIME_COST_SEC.base;
@@ -1893,8 +1996,12 @@ export function useGameController(): {
           const hasRecentNpcLine = state.dialogue.turns
             .slice(-2)
             .some((turn) => String(turn.npcId || "") === action.npcId);
-          if (!hasRecentNpcLine) {
-            const greet = dialogue.greeting(action.npcId, encounterCount, `${state.meta.seed}:${state.timer.remainingSec}:tap-open`);
+          const questionGate = resolveQuestionGate(state, action.npcId);
+          const shouldEmitOpeningLine = !action.auto || !hasRecentNpcLine;
+          if (shouldEmitOpeningLine) {
+            const greet = questionGate
+              ? { text: questionGate.opener, source: "scripted" as const }
+              : dialogue.greeting(action.npcId, encounterCount, `${state.meta.seed}:${state.timer.remainingSec}:tap-open`);
             const openingTurns = parseDisplayTurns(action.npcId, greet.text, defaultDialogueSpeaker(action.npcId));
             openingTurns.forEach((turn) => pushDialogueTurn(state, createDialogueTurn(action.npcId, turn.text, state, {
               npcId: action.npcId,
@@ -1905,6 +2012,13 @@ export function useGameController(): {
             state.dialogue.source = greet.source;
             state.quality.sourceCounts[greet.source] = (state.quality.sourceCounts[greet.source] ?? 0) + 1;
           }
+          state.dialogue.session = {
+            npcId: action.npcId,
+            status: "awaiting_player",
+            mode: questionGate ? "question_gate" : "tone_reply",
+            questionId: questionGate?.id,
+            questionChoices: questionGate?.choices ?? []
+          };
           if (!state.dialogue.greetedNpcIds.includes(action.npcId)) {
             state.dialogue.greetedNpcIds.push(action.npcId);
           }
@@ -1926,8 +2040,50 @@ export function useGameController(): {
             state.dialogue.greetedNpcIds.push(action.npcId);
             state.dialogue.encounterCountByNpc[action.npcId] = (state.dialogue.encounterCountByNpc[action.npcId] ?? 0) + 1;
           }
+          if (
+            !isSystemDialogue
+            && state.dialogue.session.npcId === action.npcId
+            && state.dialogue.session.status !== "idle"
+          ) {
+            state.dialogue.session.status = "awaiting_npc";
+          }
           if (!isSystemDialogue) {
             pushDialogueTurn(state, createDialogueTurn("You", dialogueInput, state, { npcId: "player" }));
+          }
+          if (
+            !isSystemDialogue
+            && state.dialogue.session.npcId === action.npcId
+            && state.dialogue.session.mode === "question_gate"
+            && state.dialogue.session.questionId
+          ) {
+            const gate = resolveQuestionGate(state, action.npcId);
+            const gateMatchesSession = gate && gate.id === state.dialogue.session.questionId;
+            if (gateMatchesSession) {
+              const correct = gate.validate(normalizeAnswerKey(dialogueInput));
+              const gateReply = correct ? gate.successReply : gate.failReply;
+              pushDialogueTurn(state, createDialogueTurn(action.npcId, gateReply, state, {
+                npcId: action.npcId,
+                displaySpeaker: defaultDialogueSpeaker(action.npcId),
+                poseKey: inferNpcPoseKey(action.npcId, gateReply, state, "QUESTION_GATE")
+              }));
+              state.dialogue.source = "scripted";
+              state.quality.sourceCounts.scripted = (state.quality.sourceCounts.scripted ?? 0) + 1;
+              updateNpcMemory(state, action.npcId, gateReply);
+              if (correct) {
+                state.world.events.push(gate.successEvent);
+              } else {
+                state.world.events.push(`QUESTION_GATE::${gate.id}::failed`);
+              }
+              state.dialogue.session.status = "completed";
+              result = {
+                ok: true,
+                message: correct
+                  ? "Correct answer. NPC gives a direct clue and closes the interaction."
+                  : "Incorrect answer. NPC closes the interaction."
+              };
+              handledScriptedReply = true;
+              return;
+            }
           }
           const input = dialogueInput.toLowerCase();
           if (action.npcId === "dean_cain" && /(idiot|stupid|trash|screw you|bite me|hate|fuck you)/i.test(input)) {
@@ -2264,6 +2420,14 @@ export function useGameController(): {
           return;
         }
         result = { ok: true, message: routed.text };
+      });
+    }
+
+    if (dialogueAction && !isSystemDialogue) {
+      store.patch((state) => {
+        if (state.dialogue.session.npcId === dialogueAction.npcId && state.dialogue.session.status !== "idle") {
+          state.dialogue.session.status = "completed";
+        }
       });
     }
 

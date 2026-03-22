@@ -27,6 +27,9 @@ export type GamePhase = "onboarding" | "hunt" | "escort" | "resolved";
 export type SafetyStatus = "ok" | "abort";
 export type DialogueSource = "scripted" | "llm" | "llm_regen" | "fallback" | "cache" | "cooldown";
 export type DeanConversationStage = "intro_pending" | "name_pending" | "mission_given" | "dismiss_mode" | "expelled";
+export type DialogueSessionStatus = "idle" | "awaiting_player" | "awaiting_npc" | "completed";
+export type DialogueSessionMode = "tone_reply" | "question_gate";
+export type DialogueQuestionId = "eggman_route_quiz" | "thunderhead_trade_quiz";
 
 export interface LocationContent {
   id: LocationId;
@@ -121,6 +124,14 @@ export interface NpcMemoryCard {
   milestones: string[];
 }
 
+export interface DialogueSessionState {
+  npcId: NpcId | null;
+  status: DialogueSessionStatus;
+  mode: DialogueSessionMode;
+  questionId?: DialogueQuestionId;
+  questionChoices?: string[];
+}
+
 export interface GameStateData {
   meta: {
     version: string;
@@ -195,6 +206,9 @@ export interface GameStateData {
       fratChallengeForced: boolean;
       fratLastSafeLocation: LocationId;
     };
+    settings: {
+      oneNpcPerScene: boolean;
+    };
     analytics: {
       soggyBiscuitTriggered: boolean;
     };
@@ -209,6 +223,7 @@ export interface GameStateData {
     greetedNpcIds: NpcId[];
     encounterCountByNpc: Partial<Record<NpcId, number>>;
     npcMemory: Partial<Record<NpcId, NpcMemoryCard>>;
+    session: DialogueSessionState;
   };
   quality: {
     sourceCounts: Record<string, number>;

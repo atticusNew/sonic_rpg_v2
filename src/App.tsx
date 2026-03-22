@@ -30,6 +30,7 @@ type UiAction =
   | { type: "COMPLETE_ORIENTATION_INTRO"; preferredName?: string }
   | { type: "MOVE"; target: LocationId }
   | { type: "FORCE_MOVE"; target: LocationId }
+  | { type: "SET_ONE_NPC_SCENE_MODE"; enabled: boolean }
   | { type: "START_DIALOGUE"; npcId: NpcId; auto?: boolean }
   | { type: "PLAY_BEER_PONG_SCORE"; cupsHit: number; matchup: BeerMatchup }
   | { type: "PLAY_BEER_PONG_SHOT"; shot: "safe" | "bank" | "hero" }
@@ -221,6 +222,23 @@ function buildDialogueToneReplies(
       tone: "Neutral",
       text: neutralVariants[turnSeed]
     }
+  ];
+}
+
+function buildQuestionChoiceReplies(choices: string[]): DialogueQuickReply[] {
+  const answerChoices = choices.slice(0, 3);
+  const fallbackChoices = [
+    "Answer choice unavailable.",
+    "Answer choice unavailable.",
+    "Answer choice unavailable."
+  ];
+  while (answerChoices.length < 3) {
+    answerChoices.push(fallbackChoices[answerChoices.length]);
+  }
+  return [
+    { id: "sarcastic", tone: answerChoices[0], text: answerChoices[0] },
+    { id: "informative", tone: answerChoices[1], text: answerChoices[1] },
+    { id: "neutral", tone: answerChoices[2], text: answerChoices[2] }
   ];
 }
 
@@ -760,7 +778,6 @@ function App() {
   const timerPauseSyncRef = useRef<boolean | null>(null);
   const lastCapturedResolvedSeedRef = useRef("");
   const lastAutoScrollAtRef = useRef(0);
-  const dialogueQuickRepliesCacheRef = useRef<{ key: string; value: DialogueQuickReply[] }>({ key: "", value: [] });
   const preloadedAssetUrlsRef = useRef<Set<string>>(new Set());
   const inflightAssetUrlsRef = useRef<Set<string>>(new Set());
   const beerRoundMemoryRef = useRef<Record<BeerMatchup, BeerRoundMemory | null>>({
@@ -1055,6 +1072,19 @@ function App() {
   const beerThrowsTotal = activeMode.throws;
   const beerThrowsUsed = Math.max(0, beerThrowsTotal - beerThrowsLeft);
   const engagedNpc = activeNpc;
+  const activeDialogueSession = state?.dialogue.session;
+  const sessionForEngagedNpc = engagedNpc && activeDialogueSession?.npcId === engagedNpc
+    ? activeDialogueSession
+    : null;
+  const isQuestionGateSession = sessionForEngagedNpc?.mode === "question_gate";
+  const sessionAwaitingPlayer = sessionForEngagedNpc?.status === "awaiting_player";
+  const sessionCompleted = sessionForEngagedNpc?.status === "completed";
+  const replyPanelLabel = isQuestionGateSession ? "Answer" : "Tone";
+  const dialogueInteractionHint = sessionCompleted
+    ? "Interaction complete. Tap this character again to continue."
+    : isQuestionGateSession && sessionAwaitingPlayer
+      ? "Answer the NPC question to get a direct clue."
+      : "";
   const dialogueTurnCount = state?.dialogue.turns.length ?? 0;
   const playerLocationForScroll = state?.player.location ?? null;
   const presentNpcs = useMemo(() => presentNpcsRaw, [presentNpcsRaw]);
@@ -1063,24 +1093,14 @@ function App() {
     if (!content) return "";
     return resolveCharacterImage(content.assetManifest, npc, "neutral");
   }, [content]);
-  const npcHasFreshLine = useCallback((npc: NpcId) => {
-    if (!state) return false;
-    const target = titleCase(npc).toLowerCase();
-    const recent = state.dialogue.turns.slice(-2);
-    return recent.some((turn) => {
-      if (turn.speaker === "You") return false;
-      const speakerA = (turn.displaySpeaker ?? "").toLowerCase();
-      const speakerB = (turn.speaker ?? "").toLowerCase();
-      return speakerA === target || speakerB === npc;
-    });
-  }, [state]);
   const submitQuickDialogueTone = useCallback(async (text: string, tone: DialogueTone) => {
     if (!engagedNpc || isResolved || isAwaitingNpcReply) return;
     const trimmed = text.trim();
     if (!trimmed) return;
-    await submitDialogueLocked({ type: "SUBMIT_DIALOGUE", npcId: engagedNpc, input: trimmed, tone });
+    const toneForSubmit: DialogueTone = sessionForEngagedNpc?.mode === "question_gate" ? "neutral" : tone;
+    await submitDialogueLocked({ type: "SUBMIT_DIALOGUE", npcId: engagedNpc, input: trimmed, tone: toneForSubmit });
     setPlayerInput("");
-  }, [engagedNpc, isAwaitingNpcReply, isResolved, submitDialogueLocked]);
+  }, [engagedNpc, isAwaitingNpcReply, isResolved, sessionForEngagedNpc?.mode, submitDialogueLocked]);
   const scrollToTopIfNeeded = useCallback((behavior: ScrollBehavior = "smooth") => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
     if (window.scrollY < 24) return;
@@ -1104,15 +1124,18 @@ function App() {
     setSearchLoot(null);
     setActiveNpcFocusAtMs(Date.now());
     setActiveNpc(npc);
-    if (engagedNpc === npc) return;
-    if (npcHasFreshLine(npc)) return;
+    const sessionForNpc = state?.dialogue.session;
+    const hasOpenSession = sessionForNpc?.npcId === npc
+      && sessionForNpc.status !== "idle"
+      && sessionForNpc.status !== "completed";
+    if (engagedNpc === npc && hasOpenSession) return;
     setIsAwaitingNpcReply(true);
     try {
       await runAction({ type: "START_DIALOGUE", npcId: npc }, true);
     } finally {
       setIsAwaitingNpcReply(false);
     }
-  }, [engagedNpc, isAwaitingNpcReply, npcHasFreshLine, runAction, scrollToTopIfNeeded]);
+  }, [engagedNpc, isAwaitingNpcReply, runAction, scrollToTopIfNeeded, state?.dialogue.session]);
   const handleFocusNpc = useCallback((npc: NpcId) => {
     void focusNpcConversation(npc);
   }, [focusNpcConversation]);
@@ -2762,26 +2785,22 @@ function App() {
         ? "Sighting is one move away. Jump there now before the rotation changes."
         : `Push toward ${rumoredLocationLabel}. Use route exits and avoid over-looting side areas.`;
   const compactSightingLabel = rumoredLocation ? rumoredLocationLabel : "No sighting";
-  const dialogueQuickReplyKey = engagedNpc
-    ? [
-        engagedNpc,
-        rumoredLocationLabel || compactSightingLabel,
-        state.dialogue.turns.length,
-        state.dialogue.encounterCountByNpc[engagedNpc] ?? 0,
-        Number(state.player.inventory.includes("Student ID")),
-        state.sonic.drunkLevel,
-        Number(state.sonic.following)
-      ].join("|")
-    : "";
-  if (dialogueQuickRepliesCacheRef.current.key !== dialogueQuickReplyKey) {
-    dialogueQuickRepliesCacheRef.current = {
-      key: dialogueQuickReplyKey,
-      value: engagedNpc
-        ? buildDialogueToneReplies(engagedNpc, state, rumoredLocationLabel || compactSightingLabel)
-        : []
-    };
-  }
-  const dialogueQuickReplies = dialogueQuickRepliesCacheRef.current.value;
+  const dialogueQuickReplies = useMemo(() => {
+    if (!engagedNpc) return [];
+    if (!sessionAwaitingPlayer) return [];
+    if (isQuestionGateSession) {
+      return buildQuestionChoiceReplies(sessionForEngagedNpc?.questionChoices ?? []);
+    }
+    return buildDialogueToneReplies(engagedNpc, state, rumoredLocationLabel || compactSightingLabel);
+  }, [
+    compactSightingLabel,
+    engagedNpc,
+    isQuestionGateSession,
+    rumoredLocationLabel,
+    sessionAwaitingPlayer,
+    sessionForEngagedNpc?.questionChoices,
+    state
+  ]);
   const studentIdReady = state.player.inventory.includes("Student ID");
   const runStatusLabel = state.fail.hardFailed
     ? "Failed"
@@ -3316,6 +3335,9 @@ function App() {
         engagedNpc={engagedNpc}
         isAwaitingNpcReply={isAwaitingNpcReply}
         isResolved={isResolved || isSoggySequenceActive}
+        replyPanelLabel={replyPanelLabel}
+        canSubmitReplies={sessionAwaitingPlayer}
+        interactionHint={dialogueInteractionHint}
         dialogueQuickReplies={dialogueQuickReplies}
         onSubmitQuickReply={submitQuickDialogueTone}
       />
@@ -3481,6 +3503,7 @@ function App() {
                   <span className="menu-status-chip"><strong>Sonic drunk</strong> {state.sonic.drunkLevel}/4</span>
                   <span className="menu-status-chip"><strong>Following</strong> {state.sonic.following ? "Yes" : "No"}</span>
                   <span className="menu-status-chip"><strong>Student ID</strong> {studentIdReady ? "Ready" : "Missing"}</span>
+                  <span className="menu-status-chip"><strong>Scene mode</strong> {state.world.settings.oneNpcPerScene ? "One NPC" : "Multi NPC"}</span>
                   <span className="menu-status-chip menu-status-chip-warnings">
                     <strong>Warnings</strong> Dean {warningMeter(state.fail.warnings.dean, WARNING_LIMITS.dean)} • Luigi {warningMeter(state.fail.warnings.luigi, WARNING_LIMITS.luigi)} • Frat {warningMeter(state.fail.warnings.frat, WARNING_LIMITS.frat)}
                   </span>
@@ -3544,6 +3567,17 @@ function App() {
                     }}
                   >
                     Get Hint
+                  </button>
+                  <button
+                    className="ghost"
+                    onClick={async () => {
+                      await runAction({
+                        type: "SET_ONE_NPC_SCENE_MODE",
+                        enabled: !state.world.settings.oneNpcPerScene
+                      }, true);
+                    }}
+                  >
+                    One-NPC Scenes: {state.world.settings.oneNpcPerScene ? "On" : "Off"}
                   </button>
                   <button onClick={async () => {
                     setHudMenuOpen(false);

@@ -35,4 +35,18 @@ describe("NPC presence pacing", () => {
     expect(sororityClearCount).toBeGreaterThan(0);
     expect(fratClearCount).toBeGreaterThan(0);
   });
+
+  it("enforces one NPC per location when one-scene mode is enabled", () => {
+    const state = createInitialState("presence-one-npc-seed");
+    const system = new NPCPresenceSystem();
+    state.dialogue.deanStage = "mission_given";
+    state.phase = "hunt";
+    state.player.inventory.push("Student ID");
+    state.world.settings.oneNpcPerScene = true;
+    state.timer.remainingSec = 540;
+
+    const presence = system.resolve(state);
+    const occupancy = Object.values(presence);
+    expect(occupancy.every((slot) => slot.length <= 1)).toBe(true);
+  });
 });

@@ -103,6 +103,9 @@ export function createInitialState(seed = "sonic-rpg-v2-seed"): GameStateData {
         fratChallengeForced: false,
         fratLastSafeLocation: "quad"
       },
+      settings: {
+        oneNpcPerScene: true
+      },
       analytics: {
         soggyBiscuitTriggered: false
       },
@@ -116,7 +119,13 @@ export function createInitialState(seed = "sonic-rpg-v2-seed"): GameStateData {
       deanStage: "intro_pending",
       greetedNpcIds: [],
       encounterCountByNpc: {},
-      npcMemory: {}
+      npcMemory: {},
+      session: {
+        npcId: null,
+        status: "idle",
+        mode: "tone_reply",
+        questionChoices: []
+      }
     },
     quality: {
       sourceCounts: {

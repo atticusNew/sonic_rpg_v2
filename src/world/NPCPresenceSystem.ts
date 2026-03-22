@@ -97,6 +97,43 @@ export class NPCPresenceSystem {
     this.pushWithCap(p, location, "sonic", 2);
   }
 
+  private npcPriority(state: GameStateData, location: LocationId, npc: NpcId): number {
+    if (npc === "dean_cain") {
+      return state.dialogue.deanStage === "name_pending" || state.dialogue.deanStage === "intro_pending" ? 120 : 90;
+    }
+    if (npc === "sonic") return 110;
+    if (npc === "luigi") return 105;
+    if (npc === "thunderhead") return 96;
+    if (npc === "tails") return 94;
+    if (npc === "eggman") return 92;
+    if (npc === "frat_boys") return location === "frat" ? 91 : 86;
+    if (npc === "sorority_girls") return location === "sorority" ? 90 : 85;
+    if (npc === "earthworm_jim") return 82;
+    return 80;
+  }
+
+  private pickPrimaryNpc(state: GameStateData, location: LocationId, npcs: NpcId[]): NpcId {
+    const ranked = [...npcs].sort((left, right) => {
+      const scoreDelta = this.npcPriority(state, location, right) - this.npcPriority(state, location, left);
+      if (scoreDelta !== 0) return scoreDelta;
+      const leftTie = this.hash(`${state.meta.seed}:${state.timer.remainingSec}:${location}:${left}`) % 11;
+      const rightTie = this.hash(`${state.meta.seed}:${state.timer.remainingSec}:${location}:${right}`) % 11;
+      return rightTie - leftTie;
+    });
+    return ranked[0];
+  }
+
+  private applyOneNpcPerSceneMode(state: GameStateData, presence: PresenceMap): PresenceMap {
+    if (!state.world.settings?.oneNpcPerScene) return presence;
+    const reduced = emptyPresence();
+    for (const location of Object.keys(reduced) as LocationId[]) {
+      const npcs = presence[location] ?? [];
+      if (npcs.length === 0) continue;
+      reduced[location] = [this.pickPrimaryNpc(state, location, npcs)];
+    }
+    return reduced;
+  }
+
   resolve(state: GameStateData): PresenceMap {
     const p = emptyPresence();
     const deanLockedToOffice = state.dialogue.deanStage === "intro_pending" || state.dialogue.deanStage === "name_pending";
@@ -135,9 +172,9 @@ export class NPCPresenceSystem {
           ? state.player.location
           : "quad";
       p[eventLocation] = ["luigi"];
-      return p;
+      return this.applyOneNpcPerSceneMode(state, p);
     }
 
-    return p;
+    return this.applyOneNpcPerSceneMode(state, p);
   }
 }
