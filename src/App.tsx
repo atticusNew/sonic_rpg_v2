@@ -2785,22 +2785,13 @@ function App() {
         ? "Sighting is one move away. Jump there now before the rotation changes."
         : `Push toward ${rumoredLocationLabel}. Use route exits and avoid over-looting side areas.`;
   const compactSightingLabel = rumoredLocation ? rumoredLocationLabel : "No sighting";
-  const dialogueQuickReplies = useMemo(() => {
-    if (!engagedNpc) return [];
-    if (!sessionAwaitingPlayer) return [];
-    if (isQuestionGateSession) {
-      return buildQuestionChoiceReplies(sessionForEngagedNpc?.questionChoices ?? []);
-    }
-    return buildDialogueToneReplies(engagedNpc, state, rumoredLocationLabel || compactSightingLabel);
-  }, [
-    compactSightingLabel,
-    engagedNpc,
-    isQuestionGateSession,
-    rumoredLocationLabel,
-    sessionAwaitingPlayer,
-    sessionForEngagedNpc?.questionChoices,
-    state
-  ]);
+  const dialogueQuickReplies = !engagedNpc
+    ? []
+    : !sessionAwaitingPlayer
+      ? []
+      : isQuestionGateSession
+        ? buildQuestionChoiceReplies(sessionForEngagedNpc?.questionChoices ?? [])
+        : buildDialogueToneReplies(engagedNpc, state, rumoredLocationLabel || compactSightingLabel);
   const studentIdReady = state.player.inventory.includes("Student ID");
   const runStatusLabel = state.fail.hardFailed
     ? "Failed"
