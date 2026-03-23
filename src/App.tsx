@@ -4,6 +4,7 @@ import { seededRoll } from "./app/actions/minigameActions";
 import type { GameStateData, LocationId, NpcId } from "./types/game";
 import { ESCORT_READY_DRUNK_LEVEL, WARNING_LIMITS, warningMeter } from "./gameplay/progressionRules";
 import { deriveConversationContract, isGroupNpc, npcBeVerb } from "./app/conversationContract";
+import { blockedLocationMessage, isLocationBlocked } from "./app/navigationRules";
 import { ITEM_HELP } from "./app/itemHelpCatalog";
 import { resolveBackgroundImage, resolveCharacterImage } from "./assets/AssetManifest";
 import { apiUrl } from "./api/apiUrl";
@@ -2800,7 +2801,11 @@ function App() {
       id: "A",
       label: "Beer Pong Route",
       complete: state.routes.routeA.complete,
-      note: state.routes.routeA.complete ? "Route done." : "Win rounds to raise Sonic drunk level."
+      note: state.routes.routeA.complete
+        ? "Route done."
+        : state.world.restrictions.fratBanned
+          ? "Frat banned this run. Beer Pong route is unavailable; pivot to Whiskey/Tunnel/Trick."
+          : "Win rounds to raise Sonic drunk level."
     },
     {
       id: "B",
@@ -2845,8 +2850,9 @@ function App() {
   const rumoredLocationLabel = rumoredLocation
     ? (content.locations.find((loc) => loc.id === rumoredLocation)?.name ?? titleCase(rumoredLocation))
     : "";
+  const rumoredLocationBlocked = Boolean(rumoredLocation && isLocationBlocked(state, rumoredLocation));
   const sonicIntelAtCurrent = Boolean(rumoredLocation && rumoredLocation === state.player.location);
-  const sonicIntelReachableNow = Boolean(rumoredLocation && exits.includes(rumoredLocation));
+  const sonicIntelReachableNow = Boolean(rumoredLocation && exits.includes(rumoredLocation) && !rumoredLocationBlocked);
   const latestSonicRumorIndex = latestSonicRumorEvent ? state.world.events.lastIndexOf(latestSonicRumorEvent) : -1;
   const eventsSinceSonicRumor = latestSonicRumorIndex >= 0
     ? Math.max(0, (state.world.events.length - 1) - latestSonicRumorIndex)
@@ -2864,6 +2870,8 @@ function App() {
     ? "No recent sighting surfaced. Talk to clue NPCs and keep moving through social lanes."
     : sonicIntelAtCurrent
       ? "Sighting matches your current location. Talk to nearby NPCs or run escort setup now."
+      : rumoredLocationBlocked
+        ? blockedLocationMessage(rumoredLocation)
       : sonicIntelReachableNow
         ? "Sighting is one move away. Jump there now before the rotation changes."
         : `Push toward ${rumoredLocationLabel}. Use route exits and avoid over-looting side areas.`;
@@ -3309,15 +3317,15 @@ function App() {
 
   const nextBestActionKey = routeActionButtons[0]?.key ?? null;
   const moveActions: ActionButtonDef[] = exits.map((target) => {
-    const isFratBannedMove = target === "frat" && state.world.restrictions.fratBanned;
+    const isBlockedMove = isLocationBlocked(state, target);
     return {
       key: `MOVE_${target}`,
       label: `Go ${content?.locations.find((l) => l.id === target)?.name ?? titleCase(target)}`,
       action: { type: "MOVE", target } as UiAction,
       priority: 30,
       group: "move",
-      disabled: isFratBannedMove,
-      badge: isFratBannedMove ? "BANNED" : undefined
+      disabled: isBlockedMove,
+      badge: isBlockedMove ? "BANNED" : undefined
     };
   });
   const recommendedActions: ActionButtonDef[] = [];

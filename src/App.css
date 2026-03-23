@@ -268,11 +268,13 @@ p, li, span, input, button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+  width: 100%;
 }
 
 .dialogue-choice-panel {
   display: grid;
   gap: 7px;
+  width: 100%;
   padding: 8px 10px;
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(10, 16, 52, 0.82), rgba(8, 13, 44, 0.82));
@@ -323,6 +325,7 @@ p, li, span, input, button {
 
 .quick-reply-btn {
   min-height: 38px;
+  width: 100%;
   padding: 7px 10px;
   font-size: 12.5px;
   border-radius: 10px;
@@ -2774,18 +2777,12 @@ button:disabled {
   }
 
   .quick-reply-row {
-    display: flex;
-    grid-template-columns: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 5px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    align-items: center;
-    padding-top: 2px;
-    padding-bottom: 2px;
-  }
-
-  .quick-reply-row::-webkit-scrollbar {
-    display: none;
+    overflow: visible;
+    align-items: stretch;
+    padding: 0;
   }
 
   .quick-reply-btn {
@@ -2793,8 +2790,8 @@ button:disabled {
     padding: 5px 8px;
     font-size: 11px;
     border-radius: 8px;
-    flex: 0 0 auto;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
   }
 
   .dialogue-choice-panel.answer-mode .quick-reply-row {

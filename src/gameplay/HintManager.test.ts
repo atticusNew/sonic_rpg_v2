@@ -36,4 +36,16 @@ describe("HintManager regression checks", () => {
     const hintAtThree = hintManager.getHint(state);
     expect(hintAtThree).toBe("Handcuffs path is live: use them where Sonic is present, then move straight to Stadium.");
   });
+
+  it("avoids frat-fastest guidance when frat is banned", () => {
+    const hintManager = new HintManager();
+    const state = buildHintReadyState();
+    state.sonic.drunkLevel = 1;
+    state.world.restrictions.fratBanned = true;
+    state.player.inventory.push("Asswine");
+
+    const hint = hintManager.getHint(state);
+    expect(hint).toContain("Frat banned");
+    expect(hint).not.toContain("Frat route is fastest");
+  });
 });
