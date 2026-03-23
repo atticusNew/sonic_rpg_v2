@@ -20,7 +20,6 @@ import warmBeerIcon from "./assets/items/items_warm_beer.png";
 import whiskeyIcon from "./assets/items/items_whiskey.png";
 import whistleIcon from "./assets/items/items_whistle.png";
 import { ScenePanel } from "./components/game/ScenePanel";
-import { PresenceBar } from "./components/game/PresenceBar";
 import { BottomActionStrip } from "./components/game/BottomActionStrip";
 import "./App.css";
 
@@ -778,6 +777,7 @@ function App() {
   const timerPauseSyncRef = useRef<boolean | null>(null);
   const lastCapturedResolvedSeedRef = useRef("");
   const lastAutoScrollAtRef = useRef(0);
+  const lastAutoEncounterSignatureRef = useRef("");
   const preloadedAssetUrlsRef = useRef<Set<string>>(new Set());
   const inflightAssetUrlsRef = useRef<Set<string>>(new Set());
   const beerRoundMemoryRef = useRef<Record<BeerMatchup, BeerRoundMemory | null>>({
@@ -1081,18 +1081,24 @@ function App() {
   const sessionCompleted = sessionForEngagedNpc?.status === "completed";
   const replyPanelLabel = isQuestionGateSession ? "Answer" : "Tone";
   const dialogueInteractionHint = sessionCompleted
-    ? "Interaction complete. Tap this character again to continue."
+    ? "Interaction complete. Make your next move."
     : isQuestionGateSession && sessionAwaitingPlayer
       ? "Answer the NPC question to get a direct clue."
       : "";
   const dialogueTurnCount = state?.dialogue.turns.length ?? 0;
   const playerLocationForScroll = state?.player.location ?? null;
   const presentNpcs = useMemo(() => presentNpcsRaw, [presentNpcsRaw]);
+  const leadSceneNpc = presentNpcs[0] ?? null;
+  const scenePresenceLabel = !leadSceneNpc
+    ? "No one is here right now."
+    : engagedNpc === leadSceneNpc && isAwaitingNpcReply
+      ? `${titleCase(leadSceneNpc)} is replying...`
+      : engagedNpc === leadSceneNpc && sessionAwaitingPlayer
+        ? `${titleCase(leadSceneNpc)} is waiting for your response.`
+        : sessionCompleted && engagedNpc === leadSceneNpc
+          ? `${titleCase(leadSceneNpc)} finished this exchange.`
+          : `${titleCase(leadSceneNpc)} is here.`;
   const clockText = `${Math.floor((state?.timer.remainingSec ?? 0) / 60).toString().padStart(2, "0")}:${((state?.timer.remainingSec ?? 0) % 60).toString().padStart(2, "0")}`;
-  const resolveNpcImage = useCallback((npc: NpcId) => {
-    if (!content) return "";
-    return resolveCharacterImage(content.assetManifest, npc, "neutral");
-  }, [content]);
   const submitQuickDialogueTone = useCallback(async (text: string, tone: DialogueTone) => {
     if (!engagedNpc || isResolved || isAwaitingNpcReply) return;
     const trimmed = text.trim();
@@ -1136,9 +1142,6 @@ function App() {
       setIsAwaitingNpcReply(false);
     }
   }, [engagedNpc, isAwaitingNpcReply, runAction, scrollToTopIfNeeded, state?.dialogue.session]);
-  const handleFocusNpc = useCallback((npc: NpcId) => {
-    void focusNpcConversation(npc);
-  }, [focusNpcConversation]);
   const hintSignalStrong = useMemo(() => {
     if (!state) return false;
     if (state.timer.remainingSec < 180) return true;
@@ -1226,6 +1229,58 @@ function App() {
       window.removeEventListener("pageshow", jumpTopAuto);
     };
   }, [scrollToTopIfNeeded]);
+
+  useEffect(() => {
+    if (!state || isResolved) return;
+    const leadNpc = leadSceneNpc;
+    const signature = `${state.player.location}:${leadNpc ?? "none"}`;
+    if (!leadNpc) {
+      lastAutoEncounterSignatureRef.current = signature;
+      return;
+    }
+    if (
+      showLandingPage
+      || landingClosing
+      || orientationIntroOpen
+      || starterRoutePanelOpen
+      || hudMenuOpen
+      || actionMenuOpen
+      || beerGameOpen
+      || eggmanLabOpen
+      || stripPokerOpen
+      || Boolean(notice)
+      || Boolean(locationSplash)
+      || isSoggySequenceActive
+      || isAwaitingNpcReply
+    ) {
+      return;
+    }
+    if (lastAutoEncounterSignatureRef.current === signature) return;
+    lastAutoEncounterSignatureRef.current = signature;
+    void focusNpcConversation(leadNpc);
+  }, [
+    actionMenuOpen,
+    beerGameOpen,
+    eggmanLabOpen,
+    focusNpcConversation,
+    hudMenuOpen,
+    isAwaitingNpcReply,
+    isResolved,
+    isSoggySequenceActive,
+    landingClosing,
+    leadSceneNpc,
+    locationSplash,
+    notice,
+    orientationIntroOpen,
+    showLandingPage,
+    starterRoutePanelOpen,
+    state,
+    stripPokerOpen
+  ]);
+
+  useEffect(() => {
+    lastAutoEncounterSignatureRef.current = "";
+  }, [state?.meta.seed]);
 
   useEffect(() => {
     if (!state || !isResolved) return;
@@ -3327,20 +3382,16 @@ function App() {
         isAwaitingNpcReply={isAwaitingNpcReply}
         isResolved={isResolved || isSoggySequenceActive}
         replyPanelLabel={replyPanelLabel}
+        isQuestionMode={isQuestionGateSession}
         canSubmitReplies={sessionAwaitingPlayer}
         interactionHint={dialogueInteractionHint}
         dialogueQuickReplies={dialogueQuickReplies}
         onSubmitQuickReply={submitQuickDialogueTone}
       />
 
-      <PresenceBar
-        presentNpcs={presentNpcs}
-        engagedNpc={engagedNpc}
-        isResolved={isResolved || isSoggySequenceActive}
-        titleCase={titleCase}
-        resolveNpcImage={resolveNpcImage}
-        onFocusNpc={handleFocusNpc}
-      />
+      <section className="npc-presence-status" aria-live="polite">
+        <p>{scenePresenceLabel}</p>
+      </section>
 
       {showCompactMissionBar && (
         <section className="mission-compact-bar" aria-label="Mission status">

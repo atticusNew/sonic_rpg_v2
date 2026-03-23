@@ -79,6 +79,8 @@ export function validateGameStateCandidate(candidate: unknown): candidate is Gam
     if (!DIALOGUE_SESSION_STATUSES.includes(state.dialogue.session.status as (typeof DIALOGUE_SESSION_STATUSES)[number])) return false;
     if (!DIALOGUE_SESSION_MODES.includes(state.dialogue.session.mode as (typeof DIALOGUE_SESSION_MODES)[number])) return false;
     if (state.dialogue.session.questionChoices !== undefined && !isStringArray(state.dialogue.session.questionChoices)) return false;
+    if (state.dialogue.session.questionAttemptCount !== undefined && typeof state.dialogue.session.questionAttemptCount !== "number") return false;
+    if (state.dialogue.session.maxQuestionAttempts !== undefined && typeof state.dialogue.session.maxQuestionAttempts !== "number") return false;
   }
   if (!isRecord(state.quality) || !isRecord(state.quality.sourceCounts)) return false;
 
@@ -115,7 +117,13 @@ export function normalizeGameState(candidate: unknown): GameStateData | null {
     questionId: state.dialogue.session?.questionId,
     questionChoices: Array.isArray(state.dialogue.session?.questionChoices)
       ? state.dialogue.session.questionChoices.slice(0, 3)
-      : []
+      : [],
+    questionAttemptCount: Number.isFinite(state.dialogue.session?.questionAttemptCount)
+      ? Math.max(0, Math.floor(Number(state.dialogue.session.questionAttemptCount)))
+      : 0,
+    maxQuestionAttempts: Number.isFinite(state.dialogue.session?.maxQuestionAttempts)
+      ? Math.max(1, Math.floor(Number(state.dialogue.session.maxQuestionAttempts)))
+      : 2
   };
   return state;
 }

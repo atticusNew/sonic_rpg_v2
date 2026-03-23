@@ -124,7 +124,9 @@ export function createInitialState(seed = "sonic-rpg-v2-seed"): GameStateData {
         npcId: null,
         status: "idle",
         mode: "tone_reply",
-        questionChoices: []
+        questionChoices: [],
+        questionAttemptCount: 0,
+        maxQuestionAttempts: 2
       }
     },
     quality: {

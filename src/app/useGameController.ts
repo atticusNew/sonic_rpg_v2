@@ -139,6 +139,8 @@ type QuestionGateDefinition = {
   opener: string;
   choices: string[];
   validate: (input: string) => boolean;
+  retryOpener?: string;
+  retryChoices?: string[];
   successReply: string;
   failReply: string;
   successEvent: string;
@@ -284,7 +286,9 @@ function createIdleDialogueSession(): GameStateData["dialogue"]["session"] {
     npcId: null,
     status: "idle",
     mode: "tone_reply",
-    questionChoices: []
+    questionChoices: [],
+    questionAttemptCount: 0,
+    maxQuestionAttempts: 2
   };
 }
 
@@ -297,39 +301,77 @@ function resolveQuestionGate(state: GameStateData, npcId: NpcId): QuestionGateDe
     npcId === "eggman"
     && state.player.location === "eggman_classroom"
     && state.player.inventory.includes("Student ID")
-    && !state.world.events.includes("QUESTION_GATE::eggman_route_quiz::passed")
+    && !state.world.events.includes("QUESTION_GATE::eggman_lab_quiz::passed")
   ) {
     return {
-      id: "eggman_route_quiz",
-      opener: "Pop quiz, underachiever: what move actually saves clock during hunt routing?",
+      id: "eggman_lab_quiz",
+      opener: "Laboratory pop quiz: which gas makes soda fizzy without making your tongue float away?",
       choices: [
-        "Camp Sorority and wait for Sonic.",
-        "Use Quad as a transit hub and rotate quickly.",
-        "Stay in one room and spam dialogue."
+        "Helium",
+        "Carbon dioxide",
+        "Hydrogen"
       ],
-      validate: (input) => /quad.*transit|transit.*quad|rotate.*quick|move.*quick/i.test(input),
-      successReply: "Correct. Direct clue: route through Quad, then sweep Cafeteria or Dorm Hall for live Sonic intel.",
-      failReply: "Wrong. You are roleplaying a loading screen. Direct clue withheld until you answer cleanly next time.",
-      successEvent: "QUESTION_GATE::eggman_route_quiz::passed"
+      validate: (input) => /(carbondioxide|co2)/i.test(input),
+      retryOpener: "Try again: same quiz, less panic. Pick the actual carbonation gas.",
+      retryChoices: [
+        "Carbon dioxide",
+        "Nitrogen",
+        "Oxygen"
+      ],
+      successReply: "Correct. Your brain survived chemistry. Direct clue: sweep Cafeteria first, then Dorm Hall for the cleanest Sonic lead.",
+      failReply: "Incorrect and loud about it. You get one more attempt before I grade this as tragedy.",
+      successEvent: "QUESTION_GATE::eggman_lab_quiz::passed"
     };
   }
   if (
     npcId === "thunderhead"
     && state.player.location === "tunnel"
-    && !state.world.events.includes("QUESTION_GATE::thunderhead_trade_quiz::passed")
+    && !state.world.events.includes("QUESTION_GATE::thunderhead_filth_quiz::passed")
   ) {
     return {
-      id: "thunderhead_trade_quiz",
-      opener: "Tunnel check: which item actually clears my Asswine trade gate?",
+      id: "thunderhead_filth_quiz",
+      opener: "Filth quiz, sweetheart: which category gets my tunnel trade respect?",
       choices: [
-        "Hairbrush",
-        "Sorority Mascara",
-        "Fake ID Wristband"
+        "Sorority contraband",
+        "Dean paperwork",
+        "Frat trophies"
       ],
-      validate: (input) => /sorority.*mascara|mascara/i.test(input),
-      successReply: "Bingo. Direct clue: Lace Undies, Sorority Mascara, or Sorority Composite all clear the tunnel trade.",
-      failReply: "Nope. Cute guess, zero bottle. Bring real sorority contraband if you want progress.",
-      successEvent: "QUESTION_GATE::thunderhead_trade_quiz::passed"
+      validate: (input) => /sorority.*contraband|contraband.*sorority|sorority/i.test(input),
+      retryOpener: "One more chance, champ. Pick the lane with the most scandal energy.",
+      retryChoices: [
+        "Sorority contraband",
+        "Dorm laundry",
+        "Campus map"
+      ],
+      successReply: "There it is. Direct clue: Lace Undies, Sorority Mascara, or Sorority Composite gets you Asswine.",
+      failReply: "Still wrong. You smell determined but uninformed.",
+      successEvent: "QUESTION_GATE::thunderhead_filth_quiz::passed"
+    };
+  }
+  if (
+    npcId === "sonic"
+    && state.player.location === "dorm_room"
+    && !state.sonic.following
+    && !state.world.events.includes("QUESTION_GATE::sonic_pop_quiz::passed")
+  ) {
+    return {
+      id: "sonic_pop_quiz",
+      opener: "Pop-culture check: which show gave us Stephanie Tanner yelling 'How rude'?",
+      choices: [
+        "Saved by the Bell",
+        "Fresh Prince of Bel-Air",
+        "Full House"
+      ],
+      validate: (input) => /(fullhouse|full house)/i.test(input),
+      retryOpener: "Nope. Last shot: pick the sitcom, not your trauma.",
+      retryChoices: [
+        "Family Matters",
+        "Full House",
+        "Boy Meets World"
+      ],
+      successReply: "Bingo. You earned a clue. Bring booze and one bold pitch, and I will actually move.",
+      failReply: "Wrong era, wrong vibe. I am disappointed in your rerun literacy.",
+      successEvent: "QUESTION_GATE::sonic_pop_quiz::passed"
     };
   }
   return null;
@@ -411,7 +453,13 @@ export function useGameController(): {
           questionId: initial.dialogue.session.questionId,
           questionChoices: Array.isArray(initial.dialogue.session.questionChoices)
             ? initial.dialogue.session.questionChoices.slice(0, 3)
-            : []
+            : [],
+          questionAttemptCount: Number.isFinite(initial.dialogue.session.questionAttemptCount)
+            ? Math.max(0, Math.floor(Number(initial.dialogue.session.questionAttemptCount)))
+            : 0,
+          maxQuestionAttempts: Number.isFinite(initial.dialogue.session.maxQuestionAttempts)
+            ? Math.max(1, Math.floor(Number(initial.dialogue.session.maxQuestionAttempts)))
+            : 2
         };
       }
       initial.sonic.patience = Number.isFinite(initial.sonic.patience) ? Math.max(0, Math.min(2, Number(initial.sonic.patience))) : 2;
@@ -2017,7 +2065,9 @@ export function useGameController(): {
             status: "awaiting_player",
             mode: questionGate ? "question_gate" : "tone_reply",
             questionId: questionGate?.id,
-            questionChoices: questionGate?.choices ?? []
+            questionChoices: questionGate?.choices ?? [],
+            questionAttemptCount: 0,
+            maxQuestionAttempts: questionGate ? 2 : 1
           };
           if (!state.dialogue.greetedNpcIds.includes(action.npcId)) {
             state.dialogue.greetedNpcIds.push(action.npcId);
@@ -2060,27 +2110,59 @@ export function useGameController(): {
             const gateMatchesSession = gate && gate.id === state.dialogue.session.questionId;
             if (gateMatchesSession) {
               const correct = gate.validate(normalizeAnswerKey(dialogueInput));
-              const gateReply = correct ? gate.successReply : gate.failReply;
-              pushDialogueTurn(state, createDialogueTurn(action.npcId, gateReply, state, {
+              const nextAttempt = (state.dialogue.session.questionAttemptCount ?? 0) + 1;
+              const maxAttempts = Math.max(1, state.dialogue.session.maxQuestionAttempts ?? 2);
+              if (correct) {
+                const gateReply = gate.successReply;
+                pushDialogueTurn(state, createDialogueTurn(action.npcId, gateReply, state, {
+                  npcId: action.npcId,
+                  displaySpeaker: defaultDialogueSpeaker(action.npcId),
+                  poseKey: inferNpcPoseKey(action.npcId, gateReply, state, "QUESTION_GATE")
+                }));
+                state.dialogue.source = "scripted";
+                state.quality.sourceCounts.scripted = (state.quality.sourceCounts.scripted ?? 0) + 1;
+                updateNpcMemory(state, action.npcId, gateReply);
+                state.world.events.push(gate.successEvent);
+                state.dialogue.session.status = "completed";
+                state.dialogue.session.questionAttemptCount = nextAttempt;
+                result = { ok: true, message: "Correct answer. NPC gives a direct clue and closes the interaction." };
+                handledScriptedReply = true;
+                return;
+              }
+
+              if (nextAttempt < maxAttempts) {
+                const followUpLine = gate.retryOpener
+                  ? `${gate.failReply} ${gate.retryOpener}`
+                  : gate.failReply;
+                pushDialogueTurn(state, createDialogueTurn(action.npcId, followUpLine, state, {
+                  npcId: action.npcId,
+                  displaySpeaker: defaultDialogueSpeaker(action.npcId),
+                  poseKey: inferNpcPoseKey(action.npcId, followUpLine, state, "QUESTION_GATE")
+                }));
+                state.dialogue.source = "scripted";
+                state.quality.sourceCounts.scripted = (state.quality.sourceCounts.scripted ?? 0) + 1;
+                updateNpcMemory(state, action.npcId, followUpLine);
+                state.dialogue.session.status = "awaiting_player";
+                state.dialogue.session.questionAttemptCount = nextAttempt;
+                state.dialogue.session.questionChoices = gate.retryChoices ?? gate.choices;
+                result = { ok: true, message: "Incorrect answer. NPC asks one follow-up question." };
+                handledScriptedReply = true;
+                return;
+              }
+
+              const finalFailLine = `${gate.failReply} Conversation over.`;
+              pushDialogueTurn(state, createDialogueTurn(action.npcId, finalFailLine, state, {
                 npcId: action.npcId,
                 displaySpeaker: defaultDialogueSpeaker(action.npcId),
-                poseKey: inferNpcPoseKey(action.npcId, gateReply, state, "QUESTION_GATE")
+                poseKey: inferNpcPoseKey(action.npcId, finalFailLine, state, "QUESTION_GATE")
               }));
               state.dialogue.source = "scripted";
               state.quality.sourceCounts.scripted = (state.quality.sourceCounts.scripted ?? 0) + 1;
-              updateNpcMemory(state, action.npcId, gateReply);
-              if (correct) {
-                state.world.events.push(gate.successEvent);
-              } else {
-                state.world.events.push(`QUESTION_GATE::${gate.id}::failed`);
-              }
+              updateNpcMemory(state, action.npcId, finalFailLine);
+              state.world.events.push(`QUESTION_GATE::${gate.id}::failed`);
               state.dialogue.session.status = "completed";
-              result = {
-                ok: true,
-                message: correct
-                  ? "Correct answer. NPC gives a direct clue and closes the interaction."
-                  : "Incorrect answer. NPC closes the interaction."
-              };
+              state.dialogue.session.questionAttemptCount = nextAttempt;
+              result = { ok: true, message: "Incorrect answer. NPC closes the interaction." };
               handledScriptedReply = true;
               return;
             }
@@ -2425,7 +2507,7 @@ export function useGameController(): {
 
     if (dialogueAction && !isSystemDialogue) {
       store.patch((state) => {
-        if (state.dialogue.session.npcId === dialogueAction.npcId && state.dialogue.session.status !== "idle") {
+        if (state.dialogue.session.npcId === dialogueAction.npcId && state.dialogue.session.status === "awaiting_npc") {
           state.dialogue.session.status = "completed";
         }
       });

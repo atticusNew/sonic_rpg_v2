@@ -29,7 +29,7 @@ export type DialogueSource = "scripted" | "llm" | "llm_regen" | "fallback" | "ca
 export type DeanConversationStage = "intro_pending" | "name_pending" | "mission_given" | "dismiss_mode" | "expelled";
 export type DialogueSessionStatus = "idle" | "awaiting_player" | "awaiting_npc" | "completed";
 export type DialogueSessionMode = "tone_reply" | "question_gate";
-export type DialogueQuestionId = "eggman_route_quiz" | "thunderhead_trade_quiz";
+export type DialogueQuestionId = "eggman_lab_quiz" | "thunderhead_filth_quiz" | "sonic_pop_quiz";
 
 export interface LocationContent {
   id: LocationId;
@@ -130,6 +130,8 @@ export interface DialogueSessionState {
   mode: DialogueSessionMode;
   questionId?: DialogueQuestionId;
   questionChoices?: string[];
+  questionAttemptCount?: number;
+  maxQuestionAttempts?: number;
 }
 
 export interface GameStateData {

@@ -261,6 +261,7 @@ p, li, span, input, button {
   margin: 0;
   font-size: 13px;
   color: #cfedff;
+  line-height: 1.35;
 }
 
 .quick-reply-row {
@@ -304,6 +305,10 @@ p, li, span, input, button {
   background: rgba(22, 31, 86, 0.55);
   color: rgba(216, 229, 255, 0.9);
   font-weight: 700;
+  max-width: min(72vw, 380px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dialogue-tone-current.is-selected {
@@ -354,6 +359,22 @@ p, li, span, input, button {
 .quick-reply-btn-neutral {
   border-color: rgba(168, 182, 224, 0.52);
   background: linear-gradient(180deg, rgba(56, 68, 114, 0.95), rgba(37, 46, 84, 0.95));
+}
+
+.dialogue-choice-panel.answer-mode {
+  gap: 8px;
+}
+
+.dialogue-choice-panel.answer-mode .quick-reply-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.quick-reply-btn-answer {
+  min-height: 46px;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
 }
 
 .dialogue-box {
@@ -413,6 +434,20 @@ p, li, span, input, button {
   opacity: 0.46;
   transform: translateY(2px) scale(0.985);
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.npc-presence-status {
+  margin-top: -2px;
+  background: rgba(14, 17, 50, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.npc-presence-status p {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(224, 236, 255, 0.9);
 }
 
 .presence-bar {
@@ -2611,6 +2646,15 @@ button:disabled {
     border-radius: 9px;
   }
 
+  .npc-presence-status {
+    padding: 7px 8px;
+    border-radius: 9px;
+  }
+
+  .npc-presence-status p {
+    font-size: 11px;
+  }
+
   .presence-marker {
     min-width: 94px;
     min-height: 54px;
@@ -2712,6 +2756,21 @@ button:disabled {
     border-radius: 8px;
     flex: 0 0 auto;
     white-space: nowrap;
+  }
+
+  .dialogue-choice-panel.answer-mode .quick-reply-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .dialogue-choice-panel.answer-mode .quick-reply-btn {
+    min-height: 42px;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: left;
   }
 
   .quick-reply-btn:hover:not(:disabled),

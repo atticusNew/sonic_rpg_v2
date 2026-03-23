@@ -16,6 +16,7 @@ type Props = {
   isAwaitingNpcReply: boolean;
   isResolved: boolean;
   replyPanelLabel: string;
+  isQuestionMode: boolean;
   canSubmitReplies: boolean;
   interactionHint?: string;
   dialogueQuickReplies: Array<{ id: DialogueTone; tone: string; text: string }>;
@@ -37,6 +38,7 @@ function ScenePanelComponent(props: Props) {
     isAwaitingNpcReply,
     isResolved,
     replyPanelLabel,
+    isQuestionMode,
     canSubmitReplies,
     interactionHint,
     dialogueQuickReplies,
@@ -93,21 +95,23 @@ function ScenePanelComponent(props: Props) {
 
       <div className="scene-footer">
         {engagedNpc && (
-          <div className="dialogue-choice-panel">
+          <div className={`dialogue-choice-panel ${isQuestionMode ? "answer-mode" : ""}`}>
             <div className="dialogue-choice-header">
               <p className="dialogue-choice-label">{replyPanelLabel}</p>
               <p className={`dialogue-tone-current ${selectedTone ? "is-selected" : "is-empty"}`}>
-                {selectedTone
-                  ? `Current • ${dialogueQuickReplies.find((reply) => reply.id === selectedTone)?.tone ?? "Selected"}`
-                  : "Current • Unselected"}
+                {isQuestionMode
+                  ? (selectedTone ? "Current • Selected" : "Current • Unselected")
+                  : (selectedTone
+                    ? `Current • ${dialogueQuickReplies.find((reply) => reply.id === selectedTone)?.tone ?? "Selected"}`
+                    : "Current • Unselected")}
               </p>
             </div>
             {dialogueQuickReplies.length > 0 && (
-              <div className="quick-reply-row" aria-label="Dialogue tone choices">
+              <div className={`quick-reply-row ${isQuestionMode ? "quick-reply-row-answer" : ""}`} aria-label={isQuestionMode ? "Dialogue answer choices" : "Dialogue tone choices"}>
                 {dialogueQuickReplies.map((reply) => (
                   <button
                     key={reply.id}
-                    className={`quick-reply-btn quick-reply-btn-${reply.id} ${selectedTone === reply.id ? "quick-reply-btn-active" : ""}`}
+                    className={`quick-reply-btn quick-reply-btn-${reply.id} ${isQuestionMode ? "quick-reply-btn-answer" : ""} ${selectedTone === reply.id ? "quick-reply-btn-active" : ""}`}
                     title={reply.text}
                     aria-pressed={selectedTone === reply.id}
                     disabled={!canSubmitReplies || isAwaitingNpcReply || isResolved}
