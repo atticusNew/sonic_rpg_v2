@@ -17,11 +17,14 @@ export class HintManager {
     if (state.world.restrictions.sororityBanned && !state.player.inventory.includes("Asswine")) {
       return "Sorority route is burned. Pivot to Dean Whiskey / frat pressure and finish without tunnel trade.";
     }
-    if (state.timer.remainingSec < 180) {
-      return "Low time: in Dorm Room either dose Sonic fast or use Security Schedule to trigger the VIP trick escort.";
+    if (state.world.restrictions.fratBanned && !state.routes.routeA.complete) {
+      return "Frat banned this run. Pivot to Dean Whiskey, Tunnel trade, or VIP trick setup.";
     }
-    if (state.player.inventory.includes("Furry Handcuffs") && state.player.location === "dorm_room" && isEscortReady(state.sonic.drunkLevel)) {
-      return "Handcuffs path is live: use them now, then move straight to Stadium.";
+    if (state.timer.remainingSec < 180) {
+      return "Low time: dose Sonic fast wherever he is, or run the Security Schedule trick from Dorm Room.";
+    }
+    if (state.player.inventory.includes("Furry Handcuffs") && isEscortReady(state.sonic.drunkLevel)) {
+      return "Handcuffs path is live: use them where Sonic is present, then move straight to Stadium.";
     }
     if (!state.player.inventory.includes("Warm Beer") && state.world.visitCounts.dorms > 0) {
       return "Dorm hall stash often has Warm Beer plus utility gear if you need quick Sonic setup.";
@@ -29,7 +32,7 @@ export class HintManager {
     if (isEscortReady(state.sonic.drunkLevel) && !state.sonic.following) {
       return `Sonic is ready (drunk level ${ESCORT_READY_DRUNK_LEVEL}+). Escort him from Dorm Hall or current location.`;
     }
-    if (state.sonic.drunkLevel < 2 && !state.routes.routeA.complete) {
+    if (state.sonic.drunkLevel < 2 && !state.routes.routeA.complete && !state.world.restrictions.fratBanned) {
       return "Frat route is fastest. Beat Sonic in beer pong twice.";
     }
     if (!state.player.inventory.includes("Dean Whiskey")) {

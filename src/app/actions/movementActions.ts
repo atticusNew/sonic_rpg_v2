@@ -8,6 +8,10 @@ export function setPressure(state: GameStateData): void {
 
 export function syncSonicLocation(state: GameStateData): void {
   const previous = state.sonic.location;
+  if (state.sonic.following) {
+    state.sonic.location = state.player.location;
+    return;
+  }
   const locations = Object.keys(state.world.presentNpcs) as LocationId[];
   const sonicAt = locations.find((location) => (state.world.presentNpcs[location] ?? []).includes("sonic"));
   if (sonicAt) {

@@ -261,17 +261,20 @@ p, li, span, input, button {
   margin: 0;
   font-size: 13px;
   color: #cfedff;
+  line-height: 1.35;
 }
 
 .quick-reply-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
+  width: 100%;
 }
 
 .dialogue-choice-panel {
   display: grid;
   gap: 7px;
+  width: 100%;
   padding: 8px 10px;
   border-radius: 12px;
   background: linear-gradient(180deg, rgba(10, 16, 52, 0.82), rgba(8, 13, 44, 0.82));
@@ -304,6 +307,10 @@ p, li, span, input, button {
   background: rgba(22, 31, 86, 0.55);
   color: rgba(216, 229, 255, 0.9);
   font-weight: 700;
+  max-width: min(72vw, 380px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dialogue-tone-current.is-selected {
@@ -318,6 +325,7 @@ p, li, span, input, button {
 
 .quick-reply-btn {
   min-height: 38px;
+  width: 100%;
   padding: 7px 10px;
   font-size: 12.5px;
   border-radius: 10px;
@@ -354,6 +362,22 @@ p, li, span, input, button {
 .quick-reply-btn-neutral {
   border-color: rgba(168, 182, 224, 0.52);
   background: linear-gradient(180deg, rgba(56, 68, 114, 0.95), rgba(37, 46, 84, 0.95));
+}
+
+.dialogue-choice-panel.answer-mode {
+  gap: 8px;
+}
+
+.dialogue-choice-panel.answer-mode .quick-reply-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+
+.quick-reply-btn-answer {
+  min-height: 46px;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
 }
 
 .dialogue-box {
@@ -413,6 +437,34 @@ p, li, span, input, button {
   opacity: 0.46;
   transform: translateY(2px) scale(0.985);
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
+}
+
+.npc-presence-status {
+  margin-top: -2px;
+  background: rgba(14, 17, 50, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.npc-presence-status p {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(224, 236, 255, 0.9);
+}
+
+.npc-presence-status.npc-presence-status-awaiting_player {
+  border-color: rgba(255, 210, 74, 0.46);
+  background: linear-gradient(180deg, rgba(58, 44, 14, 0.82), rgba(33, 26, 8, 0.82));
+}
+
+.npc-presence-status.npc-presence-status-replying {
+  border-color: rgba(155, 192, 255, 0.44);
+}
+
+.npc-presence-status.npc-presence-status-completed {
+  border-color: rgba(141, 224, 170, 0.42);
+  background: linear-gradient(180deg, rgba(17, 52, 35, 0.78), rgba(11, 34, 23, 0.78));
 }
 
 .presence-bar {
@@ -994,6 +1046,21 @@ p, li, span, input, button {
   grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
 }
 
+.action-grid button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.action-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menu-inline-copy {
   margin: 0;
 }
@@ -1106,7 +1173,7 @@ p, li, span, input, button {
 }
 
 .action-pill-label {
-  margin-left: 8px;
+  margin-left: 0;
   padding: 1px 7px;
   border-radius: 999px;
   font-size: 10px;
@@ -1332,34 +1399,37 @@ button:disabled {
 }
 
 .official-notice-card {
-  border-color: rgba(192, 153, 74, 0.9);
-  background:
-    linear-gradient(180deg, rgba(248, 242, 224, 0.96), rgba(236, 225, 198, 0.96)),
+  --modal-bg: linear-gradient(180deg, rgba(248, 242, 224, 0.96), rgba(236, 225, 198, 0.96)),
     repeating-linear-gradient(180deg, rgba(110, 86, 38, 0.08) 0, rgba(110, 86, 38, 0.08) 1px, transparent 1px, transparent 28px);
-  color: #2a1f11;
+  --modal-fg: #1e150a;
+  --modal-heading: #352815;
+  --modal-muted: #5b4522;
+  border-color: rgba(192, 153, 74, 0.9);
 }
 
 .status-note-card {
   text-align: center;
-  color: #f4f8ff;
+  --modal-fg: #f4f8ff;
+  --modal-heading: #fff1bb;
+  --modal-muted: rgba(230, 235, 255, 0.9);
 }
 
 .status-note-card h3 {
   margin: 0;
-  color: #fff1bb;
 }
 
 .status-note-body {
   margin: 0;
-  color: #f7fbff;
   line-height: 1.45;
   font-size: 15px;
 }
 
 .mission-complete-card {
-  background: linear-gradient(180deg, rgba(24, 32, 92, 0.96), rgba(14, 20, 61, 0.96));
+  --modal-bg: linear-gradient(180deg, rgba(24, 32, 92, 0.96), rgba(14, 20, 61, 0.96));
+  --modal-fg: #f3f8ff;
+  --modal-heading: #f8fbff;
+  --modal-muted: #dce8ff;
   border-color: rgba(255, 210, 74, 0.78);
-  color: #f3f8ff;
 }
 
 .mission-complete-head {
@@ -1368,16 +1438,15 @@ button:disabled {
 }
 
 .mission-complete-card .official-school {
-  color: #ffefb2;
+  color: var(--modal-heading);
 }
 
 .mission-complete-card .official-dept {
-  color: #dce8ff;
+  color: var(--modal-muted);
 }
 
 .mission-complete-card h2 {
   margin: 4px 0 0;
-  color: #f8fbff;
 }
 
 .mission-complete-summary {
@@ -1392,7 +1461,7 @@ button:disabled {
 
 .mission-complete-summary p {
   margin: 0;
-  color: #eaf1ff;
+  color: var(--modal-fg);
   font-size: 13px;
 }
 
@@ -1407,7 +1476,7 @@ button:disabled {
 .mission-complete-reel h3 {
   margin: 0 0 4px;
   font-size: 14px;
-  color: #ffefb2;
+  color: var(--modal-heading);
 }
 
 .official-letterhead {
@@ -1420,7 +1489,7 @@ button:disabled {
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #3b2d16;
+  color: var(--modal-heading);
 }
 
 .official-dept {
@@ -1428,34 +1497,31 @@ button:disabled {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #5b4522;
+  color: var(--modal-muted);
 }
 
 .official-notice-card h2 {
   margin: 4px 0 0;
-  color: #352815;
 }
 
 .official-body {
-  color: #1e150a;
+  color: var(--modal-fg);
   line-height: 1.5;
 }
 
 .top-toast {
-  position: fixed;
-  left: 50%;
-  top: max(14px, env(safe-area-inset-top) + 6px);
-  transform: translateX(-50%);
-  z-index: 75;
+  position: relative;
+  margin: 6px auto 0;
   border-radius: 12px;
   padding: 9px 12px;
   font-size: 12px;
-  max-width: min(88vw, 560px);
+  max-width: min(92vw, 620px);
   text-align: center;
   color: #f5fbff;
   background: rgba(8, 13, 42, 0.88);
   border: 1px solid rgba(156, 182, 255, 0.5);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
 }
 
 .top-toast-rumor {
@@ -1530,12 +1596,16 @@ button:disabled {
 }
 
 .modal-card {
+  --modal-bg: var(--surface-card);
+  --modal-fg: #f3f8ff;
+  --modal-heading: #fff1bb;
+  --modal-muted: rgba(230, 235, 255, 0.9);
   width: min(560px, calc(100% - 8px));
   max-height: 90vh;
   overflow: auto;
   box-sizing: border-box;
   margin-inline: auto;
-  background: var(--surface-card);
+  background: var(--modal-bg);
   border: 1px solid rgba(255, 210, 74, 0.86);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
@@ -1543,15 +1613,22 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  color: var(--modal-fg);
   animation: modalCardIn var(--motion-panel) var(--ease-standard) both;
 }
 
 .modal-card p {
-  color: #f3f8ff;
+  color: var(--modal-fg);
 }
 
-.official-notice-card p {
-  color: #1e150a;
+.modal-card h2,
+.modal-card h3 {
+  color: var(--modal-heading);
+}
+
+.modal-card .muted {
+  color: var(--modal-muted);
+  opacity: 1;
 }
 
 .modal-card.action-sheet-card,
@@ -2611,6 +2688,15 @@ button:disabled {
     border-radius: 9px;
   }
 
+  .npc-presence-status {
+    padding: 7px 8px;
+    border-radius: 9px;
+  }
+
+  .npc-presence-status p {
+    font-size: 11px;
+  }
+
   .presence-marker {
     min-width: 94px;
     min-height: 54px;
@@ -2691,18 +2777,12 @@ button:disabled {
   }
 
   .quick-reply-row {
-    display: flex;
-    grid-template-columns: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 5px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    align-items: center;
-    padding-top: 2px;
-    padding-bottom: 2px;
-  }
-
-  .quick-reply-row::-webkit-scrollbar {
-    display: none;
+    overflow: visible;
+    align-items: stretch;
+    padding: 0;
   }
 
   .quick-reply-btn {
@@ -2710,8 +2790,23 @@ button:disabled {
     padding: 5px 8px;
     font-size: 11px;
     border-radius: 8px;
-    flex: 0 0 auto;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .dialogue-choice-panel.answer-mode .quick-reply-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .dialogue-choice-panel.answer-mode .quick-reply-btn {
+    min-height: 42px;
+    white-space: normal;
+    line-height: 1.25;
+    text-align: left;
   }
 
   .quick-reply-btn:hover:not(:disabled),
@@ -2738,6 +2833,17 @@ button:disabled {
   .clock-pill {
     min-height: 40px;
     font-size: 12px;
+  }
+
+  .action-grid button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 4px;
+  }
+
+  .action-pill-text {
+    white-space: normal;
+    text-align: center;
   }
 
   .search-loot-card {

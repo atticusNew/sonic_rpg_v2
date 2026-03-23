@@ -23,6 +23,23 @@ function clampDialogueText(raw: string, maxSentences: number, maxChars: number):
   return /[.!?]$/.test(hard) ? hard : `${hard}.`;
 }
 
+function normalizeDialogueLine(raw: string): string {
+  return String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pickVariant(lines: string[], seed: string): string {
+  if (lines.length === 0) return "";
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash * 33) ^ seed.charCodeAt(i)) >>> 0;
+  }
+  return lines[hash % lines.length];
+}
+
 export class DynamicDialogueService {
   private readonly fallback = new FallbackDialogueBank();
   private readonly options: DynamicDialogueOptions;
@@ -161,7 +178,24 @@ export class DynamicDialogueService {
         ? Math.min(138, currentContext.max_bubble_length_chars)
         : currentContext.max_bubble_length_chars;
       const maxSentences = request.npcId === "sorority_girls" ? 1 : currentContext.max_sentences_per_reply;
-      const text = clampDialogueText(rawText, maxSentences, maxChars);
+      let text = clampDialogueText(rawText, maxSentences, maxChars);
+      const normalizedText = normalizeDialogueLine(text);
+      const recentNpcLines = recentTurns
+        .filter((turn) => turn.npcId === request.npcId && turn.speaker !== "You")
+        .map((turn) => normalizeDialogueLine(turn.text))
+        .filter(Boolean);
+      if (normalizedText && recentNpcLines.includes(normalizedText)) {
+        const addon = pickVariant([
+          "Keep it moving.",
+          "No reruns.",
+          "New move, now.",
+          "Change pace."
+        ], `${request.state.meta.seed}:${request.state.timer.remainingSec}:${request.state.player.location}:${request.npcId}:${intent.id}`);
+        const varied = clampDialogueText(`${text.replace(/\s*[.!?]\s*$/, "")}. ${addon}`, maxSentences, maxChars);
+        if (!recentNpcLines.includes(normalizeDialogueLine(varied))) {
+          text = varied;
+        }
+      }
       if (request.npcId === "sorority_girls" && rawText.length > text.length && typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("dialogue-telemetry", { detail: { type: "sorority-trimmed" } }));
       }

@@ -30,9 +30,9 @@ export class ScriptedDialogueService {
         "Good entrance, bad timing. Name now, mission briefing next."
       ],
       luigi: [
-        "Start respectful and we get along fine.",
-        "Luigi. I can hear you from a mile away, so let's keep this civil.",
-        "Say your piece clean and we skip the drama."
+        "Start respectful and maybe this stays administrative.",
+        "Luigi. Keep it clean or I make this your last warning lap.",
+        "You get one calm conversation. Spend it well."
       ],
       eggman: [
         "Ah, finally, an audience with acceptable posture and questionable judgment.",
@@ -46,11 +46,17 @@ export class ScriptedDialogueService {
       ],
       frat_boys: [
         "Diesel: House rule one, no spectators. Bring heat or bring snacks.",
-        "Provelony Toney: Welcome to Frat. Reputation in, excuses out."
+        "Provelony Toney: Welcome to Frat. Reputation in, excuses out.",
+        "Diesel: If your plan is vibes-only, you're already losing.",
+        "Provelony Toney: Say less, swing cups, make headlines.",
+        "Diesel: We measure people in outcomes, not introductions."
       ],
       sorority_girls: [
         "Apple: Cute entrance. What's your angle?",
-        "Fedora: Confidence acceptable, judgment still pending."
+        "Fedora: Confidence acceptable, judgment still pending.",
+        "Apple: You get one first impression. Spend it better than that.",
+        "Fedora: We respect bold, not sloppy. Choose one.",
+        "Apple: If you are here for drama, at least make it premium."
       ],
       thunderhead: [
         "Tunnel desk is open. You here to trade or hear an inadvisable confession?",
@@ -83,9 +89,9 @@ export class ScriptedDialogueService {
         "You again. Give me results or give me hallway silence."
       ],
       luigi: [
-        "Back again. Respect stays high, tension stays low.",
-        "You returned. Keep your tone clean and we stay good.",
-        "Round two. Make it useful."
+        "Back again. Respect stays high or I close your route myself.",
+        "You returned. Tone check first, mission check second.",
+        "Round two. Give me one useful reason not to shut this down."
       ],
       eggman: [
         "Back already? Excellent, my superiority was getting lonely.",
@@ -99,11 +105,17 @@ export class ScriptedDialogueService {
       ],
       frat_boys: [
         "Diesel: Back in the house. Momentum talks, posture walks.",
-        "Provelony Toney: Return visit logged. Performance still pending."
+        "Provelony Toney: Return visit logged. Performance still pending.",
+        "Diesel: You're back. Great. Win something this time.",
+        "Provelony Toney: Familiar face, same pressure.",
+        "Diesel: Return visit accepted. Excuses still rejected."
       ],
       sorority_girls: [
         "Apple: You came back. That's either confidence or a warning sign.",
-        "Fedora: Return visit noted. Keep it sharp."
+        "Fedora: Return visit noted. Keep it sharp.",
+        "Apple: Round two. Try not to waste everyone's eyeliner.",
+        "Fedora: You're back, so be interesting quickly.",
+        "Apple: Repeat appearance approved. Repeat mistakes not approved."
       ],
       thunderhead: [
         "You came back. Great, my poor judgment feels seen.",
@@ -210,25 +222,32 @@ export class ScriptedDialogueService {
     }
 
     if (npcId === "luigi") {
+      if (state.sonic.following) {
+        return pickLine([
+          "I see you dragging Sonic through my lane. Stall again and I finish this mission my way.",
+          "Escort in progress, huh? One wrong move and I lock this whole route down.",
+          "You're walking Sonic under my watch. Keep it tight or I end your run on paperwork alone."
+        ], `${voiceSeed}:luigi:escort-pressure`);
+      }
       if (/(id|student id|clearance)/i.test(text)) {
         return state.player.inventory.includes("Student ID")
-          ? "You got Student ID. Good. That means you can stop improvising excuses and start executing routes."
-          : "No Student ID, no clean clearance. Go get stamped before you get stopped.";
+          ? "You got Student ID. Good. That means excuses are over and consequences start."
+          : "No Student ID, no clean clearance. Get stamped before I make this official.";
       }
       if (state.player.inventory.includes("Fake ID Wristband") || state.player.inventory.includes("Exam Keycard") || state.player.inventory.includes("Frat Bong")) {
-        return "What are you carrying right now? That item gets people expelled. Fix this before I do.";
+        return "What are you carrying right now? That's shutdown material. Drop it before I escalate.";
       }
       if (/(sorry|respect|thanks|nice|cool)/i.test(text)) {
         return state.player.inventory.includes("Lace Undies")
-          ? "You already have what Thunderhead needs. Take tunnel route now."
-          : "Accepted. Tunnel route starts under Sorority. Bring him the lace contraband.";
+          ? "You already have what Thunderhead needs. Move now before this window closes."
+          : "Accepted. Tunnel route starts under Sorority. Bring lace contraband and move fast.";
       }
       if (/(idiot|useless|stupid|hate|trash)/i.test(text)) {
         return state.fail.warnings.luigi > 0
-          ? "Keep that tone up and you're done here."
+          ? "Keep that tone up and I terminate this mission."
           : "Tone check. That's your warning.";
       }
-      return "Say one useful thing: tunnel, sorority, or route.";
+      return "Say one useful thing: route, contraband, or gate timing.";
     }
 
     if (npcId === "eggman") {

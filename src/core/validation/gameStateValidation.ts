@@ -27,6 +27,8 @@ const NPC_IDS: NpcId[] = [
 ];
 
 const PHASES: GamePhase[] = ["onboarding", "hunt", "escort", "resolved"];
+const DIALOGUE_SESSION_STATUSES = ["idle", "awaiting_player", "awaiting_npc", "completed"] as const;
+const DIALOGUE_SESSION_MODES = ["tone_reply", "question_gate"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -66,8 +68,20 @@ export function validateGameStateCandidate(candidate: unknown): candidate is Gam
 
   if (!isRecord(state.world)) return false;
   if (!isRecord(state.world.visitCounts) || !isRecord(state.world.presentNpcs) || !Array.isArray(state.world.events)) return false;
+  if (state.world.settings !== undefined) {
+    if (!isRecord(state.world.settings) || typeof state.world.settings.oneNpcPerScene !== "boolean") return false;
+  }
 
   if (!isRecord(state.dialogue) || !Array.isArray(state.dialogue.turns) || !isStringArray(state.dialogue.greetedNpcIds)) return false;
+  if (state.dialogue.session !== undefined) {
+    if (!isRecord(state.dialogue.session)) return false;
+    if (state.dialogue.session.npcId !== null && !isNpc(state.dialogue.session.npcId)) return false;
+    if (!DIALOGUE_SESSION_STATUSES.includes(state.dialogue.session.status as (typeof DIALOGUE_SESSION_STATUSES)[number])) return false;
+    if (!DIALOGUE_SESSION_MODES.includes(state.dialogue.session.mode as (typeof DIALOGUE_SESSION_MODES)[number])) return false;
+    if (state.dialogue.session.questionChoices !== undefined && !isStringArray(state.dialogue.session.questionChoices)) return false;
+    if (state.dialogue.session.questionAttemptCount !== undefined && typeof state.dialogue.session.questionAttemptCount !== "number") return false;
+    if (state.dialogue.session.maxQuestionAttempts !== undefined && typeof state.dialogue.session.maxQuestionAttempts !== "number") return false;
+  }
   if (!isRecord(state.quality) || !isRecord(state.quality.sourceCounts)) return false;
 
   const presentNpcs = state.world.presentNpcs;
@@ -88,6 +102,28 @@ export function normalizeGameState(candidate: unknown): GameStateData | null {
   state.fail.warnings.dean = Math.max(0, Math.floor(state.fail.warnings.dean));
   state.fail.warnings.luigi = Math.max(0, Math.floor(state.fail.warnings.luigi));
   state.fail.warnings.frat = Math.max(0, Math.floor(state.fail.warnings.frat));
+  state.world.settings = {
+    oneNpcPerScene: state.world.settings?.oneNpcPerScene !== false
+  };
   state.world.events = state.world.events.slice(-100);
+  state.dialogue.session = {
+    npcId: state.dialogue.session?.npcId ?? null,
+    status: DIALOGUE_SESSION_STATUSES.includes(state.dialogue.session?.status as (typeof DIALOGUE_SESSION_STATUSES)[number])
+      ? state.dialogue.session.status
+      : "idle",
+    mode: DIALOGUE_SESSION_MODES.includes(state.dialogue.session?.mode as (typeof DIALOGUE_SESSION_MODES)[number])
+      ? state.dialogue.session.mode
+      : "tone_reply",
+    questionId: state.dialogue.session?.questionId,
+    questionChoices: Array.isArray(state.dialogue.session?.questionChoices)
+      ? state.dialogue.session.questionChoices.slice(0, 3)
+      : [],
+    questionAttemptCount: Number.isFinite(state.dialogue.session?.questionAttemptCount)
+      ? Math.max(0, Math.floor(Number(state.dialogue.session.questionAttemptCount)))
+      : 0,
+    maxQuestionAttempts: Number.isFinite(state.dialogue.session?.maxQuestionAttempts)
+      ? Math.max(1, Math.floor(Number(state.dialogue.session.maxQuestionAttempts)))
+      : 2
+  };
   return state;
 }

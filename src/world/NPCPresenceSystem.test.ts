@@ -35,4 +35,35 @@ describe("NPC presence pacing", () => {
     expect(sororityClearCount).toBeGreaterThan(0);
     expect(fratClearCount).toBeGreaterThan(0);
   });
+
+  it("enforces one NPC per location when one-scene mode is enabled", () => {
+    const state = createInitialState("presence-one-npc-seed");
+    const system = new NPCPresenceSystem();
+    state.dialogue.deanStage = "mission_given";
+    state.phase = "hunt";
+    state.player.inventory.push("Student ID");
+    state.world.settings.oneNpcPerScene = true;
+    state.timer.remainingSec = 540;
+
+    const presence = system.resolve(state);
+    const occupancy = Object.values(presence);
+    expect(occupancy.every((slot) => slot.length <= 1)).toBe(true);
+  });
+
+  it("does not force-following Sonic to occupy every location", () => {
+    const state = createInitialState("presence-following-sonic-seed");
+    const system = new NPCPresenceSystem();
+    state.dialogue.deanStage = "mission_given";
+    state.phase = "escort";
+    state.player.inventory.push("Student ID");
+    state.player.location = "dorms";
+    state.sonic.following = true;
+    state.sonic.location = "dorms";
+    state.world.settings.oneNpcPerScene = true;
+    state.timer.remainingSec = 420;
+
+    const presence = system.resolve(state);
+    expect(presence.dorms.includes("sonic")).toBe(false);
+    expect(presence.stadium.includes("sonic")).toBe(false);
+  });
 });

@@ -15,6 +15,10 @@ type Props = {
   engagedNpc: NpcId | null;
   isAwaitingNpcReply: boolean;
   isResolved: boolean;
+  replyPanelLabel: string;
+  isQuestionMode: boolean;
+  canSubmitReplies: boolean;
+  interactionHint?: string;
   dialogueQuickReplies: Array<{ id: DialogueTone; tone: string; text: string }>;
   onSubmitQuickReply: (text: string, tone: DialogueTone) => Promise<void>;
 };
@@ -33,6 +37,10 @@ function ScenePanelComponent(props: Props) {
     engagedNpc,
     isAwaitingNpcReply,
     isResolved,
+    replyPanelLabel,
+    isQuestionMode,
+    canSubmitReplies,
+    interactionHint,
     dialogueQuickReplies,
     onSubmitQuickReply
   } = props;
@@ -41,6 +49,7 @@ function ScenePanelComponent(props: Props) {
     tone: null
   });
   const selectedTone = engagedNpc && toneSelection.npcId === engagedNpc
+    && dialogueQuickReplies.some((reply) => reply.id === toneSelection.tone)
     ? toneSelection.tone
     : null;
 
@@ -85,24 +94,26 @@ function ScenePanelComponent(props: Props) {
       )}
 
       <div className="scene-footer">
-        {engagedNpc && (
-          <div className="dialogue-choice-panel">
+        {engagedNpc && canSubmitReplies && dialogueQuickReplies.length > 0 && (
+          <div className={`dialogue-choice-panel ${isQuestionMode ? "answer-mode" : ""}`}>
             <div className="dialogue-choice-header">
-              <p className="dialogue-choice-label">Tone</p>
+              <p className="dialogue-choice-label">{replyPanelLabel}</p>
               <p className={`dialogue-tone-current ${selectedTone ? "is-selected" : "is-empty"}`}>
-                {selectedTone
-                  ? `Current • ${dialogueQuickReplies.find((reply) => reply.id === selectedTone)?.tone ?? "Neutral"}`
-                  : "Current • Unselected"}
+                {isQuestionMode
+                  ? (selectedTone ? "Current • Selected" : "Current • Unselected")
+                  : (selectedTone
+                    ? `Current • ${dialogueQuickReplies.find((reply) => reply.id === selectedTone)?.tone ?? "Selected"}`
+                    : "Current • Unselected")}
               </p>
             </div>
-            <div className="quick-reply-row" aria-label="Dialogue tone choices">
+            <div className={`quick-reply-row ${isQuestionMode ? "quick-reply-row-answer" : ""}`} aria-label={isQuestionMode ? "Dialogue answer choices" : "Dialogue tone choices"}>
               {dialogueQuickReplies.map((reply) => (
                 <button
                   key={reply.id}
-                  className={`quick-reply-btn quick-reply-btn-${reply.id} ${selectedTone === reply.id ? "quick-reply-btn-active" : ""}`}
+                  className={`quick-reply-btn quick-reply-btn-${reply.id} ${isQuestionMode ? "quick-reply-btn-answer" : ""} ${selectedTone === reply.id ? "quick-reply-btn-active" : ""}`}
                   title={reply.text}
                   aria-pressed={selectedTone === reply.id}
-                  disabled={isAwaitingNpcReply || isResolved}
+                  disabled={!canSubmitReplies || isAwaitingNpcReply || isResolved}
                   onClick={async () => {
                     setToneSelection({ npcId: engagedNpc, tone: reply.id });
                     await onSubmitQuickReply(reply.text, reply.id);
@@ -112,6 +123,9 @@ function ScenePanelComponent(props: Props) {
                 </button>
               ))}
             </div>
+            {interactionHint && (
+              <p className="hint-inline">{interactionHint}</p>
+            )}
           </div>
         )}
       </div>

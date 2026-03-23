@@ -39,7 +39,9 @@ export class FallbackDialogueBank {
         : pick([
           "No free ride. Bring leverage and a glorious bad idea.",
           "I can do reckless, random, and weirdly poetic, but never boring.",
-          "Bring fuel, a rumor, and an exit strategy your lawyer can deny."
+          "Bring fuel, a rumor, and an exit strategy your lawyer can deny.",
+          "Pitch bigger. I only respond to chaos with production value.",
+          "If this plan sounds legal, I am not interested."
         ], `${seed}:sonic`);
     }
     if (npcId === "tails") {
@@ -62,24 +64,30 @@ export class FallbackDialogueBank {
           ? pick([
             "Diesel: Sonic is right here. Stop asking and start challenging.",
             "Provelony Toney: He's in front of you. Cups up or hush up.",
-            "Provelony Toney: Found him. Don't waste the moment."
+            "Provelony Toney: Found him. Don't waste the moment.",
+            "Diesel: You found Sonic. Convert this into pressure now."
           ], `${seed}:frat:sonic-here`)
           : pick([
             "Diesel: Not here. Find Sonic first, then bring him back to Frat by challenging him.",
             "Provelony Toney: Sonic comes after the callout, not before.",
-            "Provelony Toney: Track him down, talk your trash, then run it here."
+            "Provelony Toney: Track him down, talk your trash, then run it here.",
+            "Diesel: Scout him, tag him, then drag momentum back here."
           ], `${seed}:frat:sonic-away`);
       }
       return pick([
         "Diesel: No handouts. Earn your lane.",
         "Provelony Toney: Reputation is rented nightly. Pay in results.",
-        "Provelony Toney: Don't embarrass us in front of the Bluetooth speaker."
+        "Provelony Toney: Don't embarrass us in front of the Bluetooth speaker.",
+        "Diesel: Outcome first. Swagger second.",
+        "Provelony Toney: This house rewards winners and content creators."
       ], `${seed}:frat`);
     }
     if (npcId === "sorority_girls") {
       return pick([
         "Apple: You're in our house, so act normal.",
-        "Fedora: We can help accidentally, not intentionally."
+        "Fedora: We can help accidentally, not intentionally.",
+        "Apple: Keep it sharp and short, we are busy being iconic.",
+        "Fedora: Ask cleanly or leave stylishly."
       ], `${seed}:sorority`);
     }
     if (npcId === "thunderhead") {
