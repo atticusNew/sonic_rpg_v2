@@ -34,15 +34,31 @@ export class NPCPresenceSystem {
   }
 
   private shouldSpawnLuigiEvent(state: GameStateData): boolean {
-    const nearObjective = state.sonic.drunkLevel >= 2
+    const nearObjective = state.sonic.following
+      || state.sonic.drunkLevel >= 2
       || state.player.inventory.includes("Dean Whiskey")
       || state.player.inventory.includes("Asswine")
+      || state.player.inventory.includes("Frat Bong")
+      || state.fail.warnings.luigi > 0
       || state.routes.routeA.complete
       || state.routes.routeB.complete
       || state.routes.routeC.complete;
     if (!nearObjective) return false;
-    const pulse = Math.abs((state.timer.remainingSec % 210) - 105);
-    return pulse <= 8;
+    if (
+      state.player.location === "stadium"
+      && (state.sonic.following || state.fail.warnings.luigi > 0 || state.player.inventory.includes("Frat Bong"))
+    ) {
+      return true;
+    }
+    const cycle = state.timer.remainingSec < 240 ? 140 : state.timer.remainingSec < 480 ? 165 : 185;
+    const center = Math.floor(cycle / 2);
+    const pulse = Math.abs((state.timer.remainingSec % cycle) - center);
+    const pulseWindow = state.sonic.following
+      ? 20
+      : state.timer.remainingSec < 240
+        ? 16
+        : 12;
+    return pulse <= pulseWindow;
   }
 
   private placeRotatingRoster(state: GameStateData, p: PresenceMap): void {
@@ -69,7 +85,10 @@ export class NPCPresenceSystem {
   private placeSonic(state: GameStateData, p: PresenceMap): void {
     if (state.sonic.cooldownMoves > 0) return;
     if (state.sonic.following) {
-      this.pushWithCap(p, state.player.location, "sonic", 2);
+      // Keep escorting Sonic mostly in mission status so scene NPCs still rotate.
+      if (state.player.location === "stadium") {
+        this.pushWithCap(p, "stadium", "sonic", 2);
+      }
       return;
     }
 
@@ -102,7 +121,7 @@ export class NPCPresenceSystem {
       return state.dialogue.deanStage === "name_pending" || state.dialogue.deanStage === "intro_pending" ? 120 : 90;
     }
     if (npc === "sonic") return 110;
-    if (npc === "luigi") return 105;
+    if (npc === "luigi") return state.sonic.following ? 118 : 108;
     if (npc === "thunderhead") return 96;
     if (npc === "tails") return 94;
     if (npc === "eggman") return 92;

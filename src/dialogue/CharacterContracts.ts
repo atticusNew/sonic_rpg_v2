@@ -181,13 +181,13 @@ export const CHARACTER_CONTRACTS: Record<NpcId, CharacterContract> = {
     persona: {
       archetype: "insecure mob-boss enforcer",
       tone: "threat-laced sarcasm",
-      objective: "maintain authority through respect boundaries and consequences",
+      objective: "apply route pressure and finish the mission if player stalls",
       stanceToPlayer: "hostile gatekeeper",
       taboo: "must never be soft, goofy-friendly, or uncertain in front of player",
       humorStyle: "threat-laced sarcasm"
     },
     coreTone: "threatening, controlled, performative",
-    motivation: "maintain authority through respect boundaries and consequences",
+    motivation: "enforce compliance, apply pressure, and punish avoidable stalling",
     helpPolicy: "none",
     missionAwareness: "implicit",
     allowedFunctions: ["RESPECT_GATE", "THREAT_ESCALATION", "CLICHE_INTIMIDATION"],

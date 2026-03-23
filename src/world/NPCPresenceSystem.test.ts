@@ -49,4 +49,21 @@ describe("NPC presence pacing", () => {
     const occupancy = Object.values(presence);
     expect(occupancy.every((slot) => slot.length <= 1)).toBe(true);
   });
+
+  it("does not force-following Sonic to occupy every location", () => {
+    const state = createInitialState("presence-following-sonic-seed");
+    const system = new NPCPresenceSystem();
+    state.dialogue.deanStage = "mission_given";
+    state.phase = "escort";
+    state.player.inventory.push("Student ID");
+    state.player.location = "dorms";
+    state.sonic.following = true;
+    state.sonic.location = "dorms";
+    state.world.settings.oneNpcPerScene = true;
+    state.timer.remainingSec = 420;
+
+    const presence = system.resolve(state);
+    expect(presence.dorms.includes("sonic")).toBe(false);
+    expect(presence.stadium.includes("sonic")).toBe(false);
+  });
 });

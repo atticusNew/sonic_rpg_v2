@@ -5,6 +5,7 @@ import { HintManager } from "../gameplay/HintManager";
 import {
   ESCORT_READY_DRUNK_LEVEL,
   LUIGI_CONTRABAND_LIMIT,
+  WARNING_LIMITS,
   isEscortReady,
   shouldLuigiExpelForContraband,
   warningMeter
@@ -130,6 +131,7 @@ const SONIC_PONG_MAX_MATCHES = 2;
 const CAMPUS_MAP_TIME_COST_SEC = 6;
 const MAX_DIALOGUE_TURNS = 140;
 const MAX_WORLD_EVENTS = 80;
+const ESCORT_STRAIN_MAX = 3;
 const MOVE_TIME_COST_SEC = {
   withMap: 8,
   base: 12
@@ -193,7 +195,10 @@ function hasCampusMapInRun(state: GameStateData): boolean {
 function buildWorldTickSignature(remainingSec: number): string {
   const elapsed = 900 - remainingSec;
   const urgencyBand = remainingSec < 240 ? 2 : remainingSec < 480 ? 1 : 0;
-  const luigiPulseBand = Math.abs((remainingSec % 210) - 105) <= 8 ? 1 : 0;
+  const luigiCycle = remainingSec < 240 ? 140 : remainingSec < 480 ? 165 : 185;
+  const luigiCenter = Math.floor(luigiCycle / 2);
+  const luigiWindow = remainingSec < 240 ? 16 : 12;
+  const luigiPulseBand = Math.abs((remainingSec % luigiCycle) - luigiCenter) <= luigiWindow ? 1 : 0;
   return [
     Math.floor(elapsed / 40),
     Math.floor(elapsed / 45),
@@ -315,6 +320,46 @@ function getActiveHandcuffWindow(state: GameStateData): { source: string; expire
     }
   }
   return null;
+}
+
+function isSonicInteractable(state: GameStateData): boolean {
+  const sonicPresentHere = (state.world.presentNpcs[state.player.location] ?? []).includes("sonic");
+  return sonicPresentHere || (state.sonic.following && state.sonic.location === state.player.location);
+}
+
+function getEscortStrain(state: GameStateData): number {
+  for (let i = state.world.events.length - 1; i >= 0; i -= 1) {
+    const entry = state.world.events[i];
+    if (!entry.startsWith("ESCORT_STRAIN::")) continue;
+    const [, rawValue = "0"] = entry.split("::");
+    const parsed = Number(rawValue);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, Math.floor(parsed));
+    }
+  }
+  return 0;
+}
+
+function resetEscortStrain(state: GameStateData, source: string): void {
+  state.world.events.push(`ESCORT_STRAIN::0::${source}`);
+}
+
+function addEscortStrain(state: GameStateData, reason: string, detail: string): number {
+  const next = Math.min(ESCORT_STRAIN_MAX, getEscortStrain(state) + 1);
+  state.world.events.push(`ESCORT_STRAIN::${next}::${reason}`);
+  state.world.events.push(`Sonic status: Escort strain ${next}/${ESCORT_STRAIN_MAX} - ${detail}`);
+  return next;
+}
+
+function triggerSonicEscortEscape(state: GameStateData, reason: string): void {
+  state.sonic.following = false;
+  state.sonic.location = "quad";
+  state.sonic.cooldownMoves = 2;
+  state.sonic.patience = 2;
+  state.world.events.push("telemetry:sonic-escort-escape");
+  state.world.events.push("telemetry:sonic-slip-away");
+  state.world.events.push("Rumor update: Sonic slipped away. Last seen near Quad.");
+  state.world.events.push(`Sonic status: Sonic escaped - ${reason}`);
 }
 
 function resolveQuestionGate(state: GameStateData, npcId: NpcId): QuestionGateDefinition | null {
@@ -865,6 +910,10 @@ export function useGameController(): {
             return;
           }
           const leftDeanWithoutName = origin === "dean_office" && state.dialogue.deanStage === "name_pending";
+          const escortFollowingBeforeMove = state.sonic.following;
+          const originToStadiumSteps = escortFollowingBeforeMove && content
+            ? Math.max(0, findShortestLocationPath(content, origin, "stadium").length - 1)
+            : null;
           if (state.sonic.cooldownMoves > 0) {
             state.sonic.cooldownMoves = Math.max(0, state.sonic.cooldownMoves - 1);
           }
@@ -888,20 +937,58 @@ export function useGameController(): {
           state.world.intents = postMoveWorld.intents;
           state.world.presentNpcs = postMoveWorld.presentNpcs;
           syncSonicLocation(state);
-          if (state.sonic.following && action.target !== "stadium") {
-            const sobrietyRoll = seededRoll(`${state.meta.seed}:${state.timer.remainingSec}:${action.target}:escort-sober`);
-            if (sobrietyRoll > 0.78) {
-              state.sonic.drunkLevel = Math.max(0, state.sonic.drunkLevel - 1);
-              state.world.events.push("Sonic status: Sonic is getting sober. Keep drinks coming or move to Stadium now.");
-              state.world.events.push("telemetry:sonic-sobering");
-              if (state.sonic.drunkLevel <= 0) {
-                state.sonic.following = false;
-                state.sonic.location = "quad";
-                state.sonic.cooldownMoves = 2;
-                state.world.events.push("Rumor update: Sonic slipped away while sobering up. Last seen near Quad.");
-                state.world.events.push("telemetry:sonic-slip-away");
+          let sonicEscapedOnMove = false;
+          if (state.sonic.following) {
+            if (action.target === "stadium") {
+              resetEscortStrain(state, "stadium_push");
+            } else {
+              let strainApplied = 0;
+              const destinationToStadiumSteps = content
+                ? Math.max(0, findShortestLocationPath(content, action.target, "stadium").length - 1)
+                : null;
+              if (
+                originToStadiumSteps !== null
+                && destinationToStadiumSteps !== null
+                && destinationToStadiumSteps > originToStadiumSteps
+              ) {
+                strainApplied = addEscortStrain(
+                  state,
+                  "detour",
+                  "You moved farther from Stadium while escorting."
+                );
+              } else if (state.timer.remainingSec <= 150) {
+                strainApplied = addEscortStrain(
+                  state,
+                  "stall",
+                  "Clock is critical and Sonic hates slow routes."
+                );
+              } else if (action.target === "frat" || action.target === "sorority") {
+                strainApplied = addEscortStrain(
+                  state,
+                  "wrong_turn",
+                  "You dragged Sonic into a social hotspot instead of the gate route."
+                );
+              }
+              if (strainApplied >= ESCORT_STRAIN_MAX) {
+                triggerSonicEscortEscape(state, "too many detours and stall moves during escort.");
+                sonicEscapedOnMove = true;
+              }
+              if (state.sonic.following && !sonicEscapedOnMove) {
+                const sobrietyRoll = seededRoll(`${state.meta.seed}:${state.timer.remainingSec}:${action.target}:escort-sober`);
+                if (sobrietyRoll > 0.78) {
+                  state.sonic.drunkLevel = Math.max(0, state.sonic.drunkLevel - 1);
+                  state.world.events.push("telemetry:sonic-sobering");
+                  state.world.events.push("Sonic status: Sonic is getting sober. Keep drinks coming or move to Stadium now.");
+                  if (state.sonic.drunkLevel <= 0) {
+                    triggerSonicEscortEscape(state, "he sobered up mid-escort and bolted.");
+                    sonicEscapedOnMove = true;
+                  }
+                }
               }
             }
+          }
+          if (sonicEscapedOnMove && result.message === "Action applied.") {
+            result = { ok: true, message: "Sonic escaped during the move. Check Sonic status and re-establish control." };
           }
           const autoNpc = postMoveWorld.presentNpcs[state.player.location]?.[0];
           if (autoNpc) {
@@ -953,7 +1040,7 @@ export function useGameController(): {
             if (heldContraband.length > 0) {
               const flaggedItem = heldContraband[0];
               if (!shouldLuigiExpelForContraband(state.fail.warnings.luigi + 1)) {
-                state.fail.warnings.luigi = 1;
+                state.fail.warnings.luigi += 1;
                 removeInventory(state, flaggedItem);
                 pendingSystemReactions.push({
                   npcId: "luigi",
@@ -969,6 +1056,26 @@ export function useGameController(): {
                 safeTransition(machine, state, "resolved", "MOVE: luigi contraband repeat");
                 result = { ok: false, message: state.fail.reason, gameOver: true };
                 return;
+              }
+            }
+            if (state.sonic.following) {
+              state.fail.warnings.luigi += 1;
+              pendingSystemReactions.push({
+                npcId: "luigi",
+                input: "__SYSTEM__:Luigi spots the player escorting Sonic and threatens to shut the mission down if they keep stalling."
+              });
+              if (evaluateLuigiDisrespect(state.fail.warnings.luigi).hardFail) {
+                state.fail.hardFailed = true;
+                state.fail.reason = "Luigi intercepts your escort route and terminates the mission.";
+                safeTransition(machine, state, "resolved", "MOVE: luigi escort interception fail");
+                result = { ok: false, message: state.fail.reason, gameOver: true };
+                return;
+              }
+              if (result.message === "Action applied.") {
+                result = {
+                  ok: true,
+                  message: `Luigi clocks the escort. Luigi pressure ${warningMeter(state.fail.warnings.luigi, WARNING_LIMITS.luigi)} - keep moving.`
+                };
               }
             }
           }
@@ -1416,7 +1523,7 @@ export function useGameController(): {
           state.world.actionUnlocks.searchCafeteria = true;
           state.timer.remainingSec = Math.max(0, state.timer.remainingSec - 12);
           setPressure(state);
-          const found = revealSearchCache(state, "cafeteria", ["Mystery Meat", "Super Dean Beans", "Warm Beer"]);
+          const found = revealSearchCache(state, "cafeteria", ["Mystery Meat", "Super Dean Beans", "Warm Beer", "Expired Energy Shot"]);
           result = { ok: true, message: formatSearchResult(found) };
           return;
         }
@@ -1515,7 +1622,7 @@ export function useGameController(): {
             result = { ok: false, message: "No Frat Bong in inventory." };
             return;
           }
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Offer this where Sonic is present." };
             return;
           }
@@ -1578,11 +1685,7 @@ export function useGameController(): {
           return;
         }
         case "USE_MYSTERY_MEAT": {
-          if (state.player.location !== "dorm_room") {
-            result = { ok: false, message: "Use Mystery Meat in Dorm Room." };
-            return;
-          }
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic isn't here." };
             return;
           }
@@ -1609,7 +1712,7 @@ export function useGameController(): {
             result = { ok: false, message: "No Security Schedule in inventory." };
             return;
           }
-          if (state.player.location === "dorm_room" && (state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (state.player.location === "dorm_room" && isSonicInteractable(state)) {
             removeInventory(state, "Security Schedule");
             if (!state.player.inventory.includes("Student ID")) {
               state.fail.warnings.dean += 1;
@@ -1623,11 +1726,16 @@ export function useGameController(): {
             state.sonic.location = state.player.location;
             state.world.actionUnlocks.escortSonic = true;
             state.world.actionUnlocks.stadiumEntry = true;
+            resetEscortStrain(state, "trick_escort_start");
             safeTransition(machine, state, "escort", "USE_SECURITY_SCHEDULE trick escort");
             state.timer.remainingSec = Math.max(0, state.timer.remainingSec - TRICK_ROUTE_TIME_COST_SEC);
             setPressure(state);
             state.world.events.push("ESCORT_MODE::trick");
             state.world.events.push("Rumor update: Sonic bought your VIP timing pitch and agreed to move.");
+            pendingSystemReactions.push({
+              npcId: "sonic",
+              input: "__SYSTEM__:Player just sold Sonic on a VIP timing trick escort. Give one short in-character reaction showing reckless buy-in."
+            });
             result = { ok: true, message: "You pitch a VIP timing window. Sonic agrees to follow you to Stadium." };
             return;
           }
@@ -1811,7 +1919,7 @@ export function useGameController(): {
           return;
         }
         case "GIVE_WHISKEY": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Give this where Sonic is present." };
             return;
           }
@@ -1827,7 +1935,7 @@ export function useGameController(): {
           return;
         }
         case "GIVE_ASSWINE": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Give this where Sonic is present." };
             return;
           }
@@ -1847,7 +1955,8 @@ export function useGameController(): {
             result = { ok: false, message: `No ${action.item} in inventory.` };
             return;
           }
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes(action.target)) {
+          const targetPresent = (state.world.presentNpcs[state.player.location] ?? []).includes(action.target);
+          if ((action.target === "sonic" ? !isSonicInteractable(state) : !targetPresent)) {
             result = { ok: false, message: `${action.target.replace(/_/g, " ")} is not here.` };
             return;
           }
@@ -1883,7 +1992,12 @@ export function useGameController(): {
             state.world.actionUnlocks.stadiumEntry = true;
             state.fail.warnings.dean += 1;
             state.world.events.push("ESCORT_MODE::handcuffs");
+            resetEscortStrain(state, "handcuff_escort_start");
             safeTransition(machine, state, "escort", "USE_ITEM_ON_TARGET handcuffs sonic");
+            pendingSystemReactions.push({
+              npcId: "sonic",
+              input: "__SYSTEM__:Player just cuffed Sonic with furry handcuffs. Give one short angry, off-color, in-character joke about the cuffs while still moving."
+            });
             result = { ok: true, message: "Cuffs lock. Sonic is furious but moving with you. Head for Stadium now." };
             return;
           }
@@ -1930,7 +2044,7 @@ export function useGameController(): {
             result = { ok: false, message: "No Furry Handcuffs in inventory." };
             return;
           }
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Track him first, then make your move." };
             return;
           }
@@ -1961,7 +2075,12 @@ export function useGameController(): {
           state.world.actionUnlocks.stadiumEntry = true;
           state.fail.warnings.dean += 1;
           state.world.events.push("ESCORT_MODE::handcuffs");
+          resetEscortStrain(state, "handcuff_escort_start");
           safeTransition(machine, state, "escort", "USE_FURRY_HANDCUFFS success");
+          pendingSystemReactions.push({
+            npcId: "sonic",
+            input: "__SYSTEM__:Player just cuffed Sonic with furry handcuffs. Give one short angry, off-color, in-character joke about the cuffs while still moving."
+          });
           result = {
             ok: true,
             message: "Cuffs click, crowd gasps, and Sonic grudgingly comes with you. Move before campus reacts."
@@ -1969,7 +2088,7 @@ export function useGameController(): {
           return;
         }
         case "USE_SUPER_DEAN_BEANS": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Use this where Sonic is present." };
             return;
           }
@@ -1990,7 +2109,7 @@ export function useGameController(): {
           return;
         }
         case "USE_EXPIRED_ENERGY_SHOT": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Use this where Sonic is present." };
             return;
           }
@@ -2005,7 +2124,7 @@ export function useGameController(): {
           return;
         }
         case "USE_WARM_BEER": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Use this where Sonic is present." };
             return;
           }
@@ -2021,7 +2140,7 @@ export function useGameController(): {
           return;
         }
         case "USE_GLITTER_BOMB_BREW": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Use this where Sonic is present." };
             return;
           }
@@ -2042,7 +2161,7 @@ export function useGameController(): {
           return;
         }
         case "USE_TURBO_SLUDGE": {
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Use this where Sonic is present." };
             return;
           }
@@ -2071,7 +2190,7 @@ export function useGameController(): {
             result = { ok: false, message: `Sonic is not in the right state to follow yet. Reach drunk level ${ESCORT_READY_DRUNK_LEVEL}+ first.` };
             return;
           }
-          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+          if (!isSonicInteractable(state)) {
             result = { ok: false, message: "Sonic is not here. Track Sonic to your location before escorting." };
             return;
           }
@@ -2079,6 +2198,11 @@ export function useGameController(): {
           state.sonic.location = state.player.location;
           state.world.actionUnlocks.stadiumEntry = true;
           state.world.events.push("ESCORT_MODE::drunk");
+          resetEscortStrain(state, "drunk_escort_start");
+          pendingSystemReactions.push({
+            npcId: "sonic",
+            input: "__SYSTEM__:Sonic is now drunk and following during escort. Give one short in-character line that sounds loose, reckless, and context-aware."
+          });
           if (state.phase !== "escort") {
             safeTransition(machine, state, "escort", "ESCORT_SONIC success");
           }
@@ -2402,7 +2526,7 @@ export function useGameController(): {
           if ((action.npcId === "sonic" || action.npcId === "dean_cain" || action.npcId === "tails")
             && /(drink|give|booze|escort|stadium|follow)/i.test(input)) {
             const inDormRoom = state.player.location === "dorm_room";
-            const sonicHere = (state.world.presentNpcs[state.player.location] ?? []).includes("sonic");
+            const sonicHere = isSonicInteractable(state);
             const hasAnySonicDrink = state.player.inventory.some((item) =>
               item === "Dean Whiskey"
               || item === "Asswine"
@@ -2469,10 +2593,7 @@ export function useGameController(): {
             if (pushyPrompt) {
               state.sonic.patience = Math.max(0, state.sonic.patience - 1);
               if (state.sonic.patience <= 0) {
-                state.sonic.following = false;
-                state.sonic.location = "quad";
-                state.sonic.cooldownMoves = 2;
-                state.sonic.patience = 2;
+                triggerSonicEscortEscape(state, "bad dialogue pressure and a failed social read.");
                 const sonicExitLine = pickDialogueVariant([
                   "This is lame and your vibe is busted. I'm out. Catch me when you have a real play.",
                   "Nah, this pitch is dead. I'm ghosting this room before my reputation catches feelings.",
@@ -2486,7 +2607,6 @@ export function useGameController(): {
                 updateNpcMemory(state, "sonic", sonicExitLine);
                 state.dialogue.source = "scripted";
                 state.quality.sourceCounts.scripted = (state.quality.sourceCounts.scripted ?? 0) + 1;
-                state.world.events.push("Rumor update: Sonic dipped after a bad exchange. Last seen heading toward Quad.");
                 state.world.events.push("telemetry:sonic-leave-triggered");
                 result = { ok: true, message: "Sonic bails after the exchange. Try rebuilding rapport before asking for Stadium again." };
                 handledScriptedReply = true;

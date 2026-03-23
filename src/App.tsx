@@ -2747,6 +2747,8 @@ function App() {
     ? "Dean's Final Notice"
     : isExposureFailure
       ? "Conduct Violation Notice"
+      : isDropoutFailure
+        ? "Withdrawal Notice"
       : "Expulsion Notice";
   const soggyFratImage = resolveCharacterImage(content.assetManifest, "frat_boys", "neutral", "Diesel");
   const shouldShowDialoguePopup = Boolean(
@@ -2804,7 +2806,7 @@ function App() {
       id: "B",
       label: "Dean Whiskey Route",
       complete: state.routes.routeB.complete,
-      note: state.player.inventory.includes("Dean Whiskey") ? "Bottle ready. Use in Dorm Room." : "Search Dean Desk when office is clear."
+      note: state.player.inventory.includes("Dean Whiskey") ? "Bottle ready. Use where Sonic is present (Dorm Room hits harder)." : "Search Dean Desk when office is clear."
     },
     {
       id: "C",
@@ -2817,7 +2819,7 @@ function App() {
       label: "Handcuffs Route",
       complete: state.sonic.following && !state.player.inventory.includes("Furry Handcuffs"),
       note: state.player.inventory.includes("Furry Handcuffs")
-        ? "Use in Dorm Room. Best after prep, but high-risk attempts can still work."
+        ? "Use where Sonic is present after setup (drunk or distraction window)."
         : "Search Sorority (when clear) for Handcuffs."
     },
     {
@@ -2927,7 +2929,8 @@ function App() {
       priority: state.sonic.drunkLevel < 3 ? 91 : 50
     });
   }
-  const sonicPresentAtCurrentLocation = (state.world.presentNpcs[state.player.location] ?? []).includes("sonic");
+  const sonicPresentAtCurrentLocation = (state.world.presentNpcs[state.player.location] ?? []).includes("sonic")
+    || (state.sonic.following && state.sonic.location === state.player.location);
   if (
     state.player.location === "frat"
     && sonicPresentAtCurrentLocation
@@ -4182,7 +4185,7 @@ function App() {
             {beerCountdown > 0 && <p className="beer-countdown">Rack reset... {beerCountdown}</p>}
             <p className="beer-control-legend">
               {beerControlStep === "position"
-                ? "Move Shot Positon"
+                ? "Move Shot Position"
                 : "Adjust Toss Arch"}
               {beerPointerMode ? ` Mode: ${beerPointerMode === "launcher" ? "Repositioning launcher" : "Aiming shot"}` : ""}
             </p>
@@ -4206,12 +4209,12 @@ function App() {
                     setDraggingLauncher(false);
                   }}
                 >
-                  Move Shot Positon
+                  Move Shot Position
                 </button>
               )}
             </div>
             {showBeerLauncherTip && (
-              <p className="beer-launcher-tip">Tip: Move Shot Positon, Lock Position, then Adjust Toss Arch.</p>
+              <p className="beer-launcher-tip">Tip: Move Shot Position, Lock Position, then Adjust Toss Arch.</p>
             )}
             <canvas
               ref={beerCanvasRef}
@@ -4544,8 +4547,8 @@ function App() {
             </div>
             <p className="agenda-intro"><strong>Dean Cain:</strong> Find Sonic and escort him to Stadium with credentials intact. Keep pressure low, move fast, and avoid bans.</p>
             <div className="agenda-grid">
-              <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Talk:</strong> Tap NPC markers for intel.</span></p>
-              <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Ask:</strong> Some clues unlock via prompts.</span></p>
+              <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Talk:</strong> NPCs auto-open when present; reply with tone/answer choices.</span></p>
+              <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Ask:</strong> Some clues unlock via direct question checks.</span></p>
               <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Search:</strong> Sweep rooms for route items.</span></p>
               <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Decide:</strong> Every item has risk and upside.</span></p>
               <p><span className="agenda-check">✓</span><span className="agenda-item-text"><strong>Prep Sonic:</strong> Raise compliance, then escort.</span></p>

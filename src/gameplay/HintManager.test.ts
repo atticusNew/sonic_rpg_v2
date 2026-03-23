@@ -34,6 +34,6 @@ describe("HintManager regression checks", () => {
 
     state.sonic.drunkLevel = 3;
     const hintAtThree = hintManager.getHint(state);
-    expect(hintAtThree).toBe("Handcuffs path is live: use them now, then move straight to Stadium.");
+    expect(hintAtThree).toBe("Handcuffs path is live: use them where Sonic is present, then move straight to Stadium.");
   });
 });

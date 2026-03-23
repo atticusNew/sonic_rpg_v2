@@ -18,10 +18,10 @@ export class HintManager {
       return "Sorority route is burned. Pivot to Dean Whiskey / frat pressure and finish without tunnel trade.";
     }
     if (state.timer.remainingSec < 180) {
-      return "Low time: in Dorm Room either dose Sonic fast or use Security Schedule to trigger the VIP trick escort.";
+      return "Low time: dose Sonic fast wherever he is, or run the Security Schedule trick from Dorm Room.";
     }
-    if (state.player.inventory.includes("Furry Handcuffs") && state.player.location === "dorm_room" && isEscortReady(state.sonic.drunkLevel)) {
-      return "Handcuffs path is live: use them now, then move straight to Stadium.";
+    if (state.player.inventory.includes("Furry Handcuffs") && isEscortReady(state.sonic.drunkLevel)) {
+      return "Handcuffs path is live: use them where Sonic is present, then move straight to Stadium.";
     }
     if (!state.player.inventory.includes("Warm Beer") && state.world.visitCounts.dorms > 0) {
       return "Dorm hall stash often has Warm Beer plus utility gear if you need quick Sonic setup.";
