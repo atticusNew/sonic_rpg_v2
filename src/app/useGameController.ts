@@ -83,6 +83,7 @@ type GameAction =
   | { type: "SEARCH_STADIUM" }
   | { type: "USE_CAMPUS_MAP" }
   | { type: "USE_GATE_STAMP" }
+  | { type: "USE_FRAT_BONG" }
   | { type: "USE_MYSTERY_MEAT" }
   | { type: "USE_SECURITY_SCHEDULE" }
   | { type: "USE_RA_WHISTLE" }
@@ -124,7 +125,7 @@ const BEER_SHOT_TIME_COST_SEC = {
 const HINT_TIME_COST_SEC = 6;
 const TRICK_ROUTE_TIME_COST_SEC = 12;
 const HANDCUFFS_UNREADY_TIME_PENALTY_SEC = 18;
-const HANDCUFFS_UNREADY_FAIL_THRESHOLD = 0.48;
+const HANDCUFF_WINDOW_DURATION_SEC = 120;
 const SONIC_PONG_MAX_MATCHES = 2;
 const CAMPUS_MAP_TIME_COST_SEC = 6;
 const MAX_DIALOGUE_TURNS = 140;
@@ -296,6 +297,26 @@ function normalizeAnswerKey(input: string): string {
   return String(input || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function activateHandcuffWindow(state: GameStateData, source: string): number {
+  const expiresAtRemainingSec = Math.max(0, state.timer.remainingSec - HANDCUFF_WINDOW_DURATION_SEC);
+  state.world.events.push(`HANDCUFF_WINDOW::${source}::${expiresAtRemainingSec}`);
+  return expiresAtRemainingSec;
+}
+
+function getActiveHandcuffWindow(state: GameStateData): { source: string; expiresAtRemainingSec: number } | null {
+  for (let i = state.world.events.length - 1; i >= 0; i -= 1) {
+    const entry = state.world.events[i];
+    if (!entry.startsWith("HANDCUFF_WINDOW::")) continue;
+    const [, source = "unknown", expiresRaw = "0"] = entry.split("::");
+    const expiresAtRemainingSec = Number(expiresRaw);
+    if (!Number.isFinite(expiresAtRemainingSec)) continue;
+    if (state.timer.remainingSec >= expiresAtRemainingSec) {
+      return { source, expiresAtRemainingSec };
+    }
+  }
+  return null;
+}
+
 function resolveQuestionGate(state: GameStateData, npcId: NpcId): QuestionGateDefinition | null {
   if (
     npcId === "eggman"
@@ -409,6 +430,10 @@ function diversifyNpcReply(state: GameStateData, npcId: NpcId, rawText: string, 
     .filter(Boolean);
   const repeatCount = recentNormalized.filter((line) => line === normalized).length;
   if (repeatCount === 0) return text;
+  const repeatTelemetry = `telemetry:dialogue-repeat:${npcId}:${repeatCount}`;
+  if (state.world.events[state.world.events.length - 1] !== repeatTelemetry) {
+    state.world.events.push(repeatTelemetry);
+  }
 
   const rerollPoolByNpc: Partial<Record<NpcId, string[]>> = {
     frat_boys: [
@@ -424,10 +449,15 @@ function diversifyNpcReply(state: GameStateData, npcId: NpcId, rawText: string, 
   };
   const rerollPool = rerollPoolByNpc[npcId];
   if (rerollPool && rerollPool.length > 0) {
-    return pickDialogueVariant(
+    const rerolled = pickDialogueVariant(
       rerollPool,
       `${state.meta.seed}:${state.timer.remainingSec}:${state.player.location}:${npcId}:${seedTag}:${repeatCount}`
     );
+    const diversifiedTelemetry = `telemetry:dialogue-diversified:${npcId}:pool`;
+    if (state.world.events[state.world.events.length - 1] !== diversifiedTelemetry) {
+      state.world.events.push(diversifiedTelemetry);
+    }
+    return rerolled;
   }
 
   const suffix = pickDialogueVariant([
@@ -437,6 +467,10 @@ function diversifyNpcReply(state: GameStateData, npcId: NpcId, rawText: string, 
     "Stay sharp and change pace."
   ], `${state.meta.seed}:${state.timer.remainingSec}:${state.player.location}:${npcId}:${seedTag}:${repeatCount}`);
   const base = text.replace(/\s*[.!?]\s*$/, "").trim();
+  const diversifiedTelemetry = `telemetry:dialogue-diversified:${npcId}:suffix`;
+  if (state.world.events[state.world.events.length - 1] !== diversifiedTelemetry) {
+    state.world.events.push(diversifiedTelemetry);
+  }
   return `${base}. ${suffix}`;
 }
 
@@ -1263,7 +1297,7 @@ export function useGameController(): {
           }
           state.world.analytics.soggyBiscuitTriggered = true;
           state.fail.hardFailed = true;
-          state.fail.reason = "You drop out from embarassment.";
+          state.fail.reason = "You drop out from embarrassment.";
           safeTransition(machine, state, "resolved", "PLAY_SOGGY_BISCUIT easter-egg fail");
           result = { ok: false, message: state.fail.reason, gameOver: true };
           return;
@@ -1474,6 +1508,25 @@ export function useGameController(): {
             return;
           }
           result = { ok: false, message: "Stamp rejected. Student ID required. Dean warning +1." };
+          return;
+        }
+        case "USE_FRAT_BONG": {
+          if (!state.player.inventory.includes("Frat Bong")) {
+            result = { ok: false, message: "No Frat Bong in inventory." };
+            return;
+          }
+          if (!(state.world.presentNpcs[state.player.location] ?? []).includes("sonic")) {
+            result = { ok: false, message: "Sonic is not here. Offer this where Sonic is present." };
+            return;
+          }
+          removeInventory(state, "Frat Bong");
+          state.sonic.drunkLevel = Math.min(4, state.sonic.drunkLevel + 1);
+          const expiresAt = activateHandcuffWindow(state, "frat_bong");
+          state.fail.warnings.dean += 1;
+          result = {
+            ok: true,
+            message: `Sonic rips the Frat Bong and gets reckless. Cuff distraction window open for ~${HANDCUFF_WINDOW_DURATION_SEC}s (until clock ${expiresAt}s).`
+          };
           return;
         }
         case "TAKE_FOUND_ITEM": {
@@ -1803,20 +1856,24 @@ export function useGameController(): {
             return;
           }
           if (action.target === "sonic") {
-            if (state.player.location !== "dorm_room") {
-              result = { ok: false, message: "You need a tighter setup. Try this in Sonic's Dorm Room." };
-              return;
-            }
-            if (!isEscortReady(state.sonic.drunkLevel)) {
+            const activeWindow = getActiveHandcuffWindow(state);
+            const cuffReady = isEscortReady(state.sonic.drunkLevel) || Boolean(activeWindow);
+            if (!cuffReady) {
               state.timer.remainingSec = Math.max(0, state.timer.remainingSec - HANDCUFFS_UNREADY_TIME_PENALTY_SEC);
               state.fail.warnings.luigi += 1;
               state.fail.warnings.dean += 1;
-              const chance = seededRoll(`${state.meta.seed}:${state.timer.remainingSec}:handcuffs-targeted`);
-              if (chance <= HANDCUFFS_UNREADY_FAIL_THRESHOLD) {
-                result = {
-                  ok: false,
-                  message: `Cuff attempt fails. Sonic slips free, warnings spike, and you lose time. Safer fallback: reach drunk level ${ESCORT_READY_DRUNK_LEVEL}+ or run the VIP schedule trick.`
-                };
+              result = {
+                ok: false,
+                message: `Cuff attempt fails. You need setup first: reach drunk level ${ESCORT_READY_DRUNK_LEVEL}+ or trigger a distraction window (Frat Bong).`
+              };
+              return;
+            }
+            if (!isEscortReady(state.sonic.drunkLevel) && activeWindow) {
+              const chance = seededRoll(`${state.meta.seed}:${state.timer.remainingSec}:handcuffs-window-targeted`);
+              if (chance <= 0.26) {
+                state.timer.remainingSec = Math.max(0, state.timer.remainingSec - HANDCUFFS_UNREADY_TIME_PENALTY_SEC);
+                state.fail.warnings.dean += 1;
+                result = { ok: false, message: "Distraction window collapses mid-attempt. Sonic slips and calls security eyes your way." };
                 return;
               }
             }
@@ -1869,10 +1926,6 @@ export function useGameController(): {
           return;
         }
         case "USE_FURRY_HANDCUFFS": {
-          if (state.player.location !== "dorm_room") {
-            result = { ok: false, message: "Use Furry Handcuffs in Dorm Room when Sonic is in range." };
-            return;
-          }
           if (!state.player.inventory.includes("Furry Handcuffs")) {
             result = { ok: false, message: "No Furry Handcuffs in inventory." };
             return;
@@ -1881,16 +1934,24 @@ export function useGameController(): {
             result = { ok: false, message: "Sonic is not here. Track him first, then make your move." };
             return;
           }
-          if (!isEscortReady(state.sonic.drunkLevel)) {
+          const activeWindow = getActiveHandcuffWindow(state);
+          const cuffReady = isEscortReady(state.sonic.drunkLevel) || Boolean(activeWindow);
+          if (!cuffReady) {
             state.timer.remainingSec = Math.max(0, state.timer.remainingSec - HANDCUFFS_UNREADY_TIME_PENALTY_SEC);
             state.fail.warnings.luigi += 1;
             state.fail.warnings.dean += 1;
-            const chance = seededRoll(`${state.meta.seed}:${state.timer.remainingSec}:handcuffs-general`);
-            if (chance <= HANDCUFFS_UNREADY_FAIL_THRESHOLD) {
-              result = {
-                ok: false,
-                message: `Cuff attempt fails. Sonic slips free, warnings spike, and heat climbs. Safer fallback: boost Sonic to drunk level ${ESCORT_READY_DRUNK_LEVEL}+ or use Security Schedule leverage.`
-              };
+            result = {
+              ok: false,
+              message: `Cuff attempt fails. Setup required first: reach drunk level ${ESCORT_READY_DRUNK_LEVEL}+ or open a Frat Bong distraction window.`
+            };
+            return;
+          }
+          if (!isEscortReady(state.sonic.drunkLevel) && activeWindow) {
+            const chance = seededRoll(`${state.meta.seed}:${state.timer.remainingSec}:handcuffs-window-general`);
+            if (chance <= 0.26) {
+              state.timer.remainingSec = Math.max(0, state.timer.remainingSec - HANDCUFFS_UNREADY_TIME_PENALTY_SEC);
+              state.fail.warnings.dean += 1;
+              result = { ok: false, message: "Window closes at the last second. Sonic slips and you lose initiative." };
               return;
             }
           }

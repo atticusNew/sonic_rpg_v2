@@ -3,6 +3,8 @@ import { useGameController } from "./app/useGameController";
 import { seededRoll } from "./app/actions/minigameActions";
 import type { GameStateData, LocationId, NpcId } from "./types/game";
 import { ESCORT_READY_DRUNK_LEVEL, WARNING_LIMITS, warningMeter } from "./gameplay/progressionRules";
+import { deriveConversationContract, isGroupNpc, npcBeVerb } from "./app/conversationContract";
+import { ITEM_HELP } from "./app/itemHelpCatalog";
 import { resolveBackgroundImage, resolveCharacterImage } from "./assets/AssetManifest";
 import { apiUrl } from "./api/apiUrl";
 import asswineIcon from "./assets/items/items_assswine.png";
@@ -61,6 +63,7 @@ type UiAction =
   | { type: "SEARCH_STADIUM" }
   | { type: "USE_CAMPUS_MAP" }
   | { type: "USE_GATE_STAMP" }
+  | { type: "USE_FRAT_BONG" }
   | { type: "USE_MYSTERY_MEAT" }
   | { type: "USE_SECURITY_SCHEDULE" }
   | { type: "USE_RA_WHISTLE" }
@@ -105,14 +108,6 @@ function defaultDialogueSpeaker(npcId: NpcId): string {
   if (npcId === "frat_boys") return "Diesel";
   if (npcId === "sorority_girls") return "Apple";
   return titleCase(npcId);
-}
-
-function isGroupNpc(npcId: NpcId): boolean {
-  return npcId === "frat_boys" || npcId === "sorority_girls";
-}
-
-function npcBeVerb(npcId: NpcId): "is" | "are" {
-  return isGroupNpc(npcId) ? "are" : "is";
 }
 
 function sanitizePopupSpeaker(npcId: NpcId | null, rawSpeaker: string): string {
@@ -253,29 +248,6 @@ type NoticeState = { title: string; body: string } | null;
 type SearchLootState = { location: LocationId; message: string } | null;
 type TopToastKind = "rumor" | "status";
 type TopToastState = { id: string; text: string; kind: TopToastKind } | null;
-const ITEM_HELP: Record<string, { desc: string; useHint: string; targetHint?: string; riskHint?: string }> = {
-  "Student ID": { desc: "Campus clearance pass.", useHint: "Needed for key checks and entry." },
-  "Dean Whiskey": { desc: "Heavy liquor stash.", useHint: "Use where Sonic is present (Dorm Room gives stronger setup).", targetHint: "Target: Sonic at current location.", riskHint: "Carrying contraband can trigger warnings." },
-  Asswine: { desc: "Thunderhead trade reward.", useHint: "Fast drunk boost anywhere Sonic is present.", targetHint: "Target: Sonic at current location.", riskHint: "Trade setup costs time." },
-  "Furry Handcuffs": { desc: "High-risk control item.", useHint: "Use on Sonic at drunk level 3+.", targetHint: "Target: Sonic when escort-ready.", riskHint: "Wrong target can hard-fail." },
-  "Frat Bong": { desc: "High-risk contraband.", useHint: "Do not carry near enforcement.", riskHint: "Can cause confiscation or expulsion." },
-  "Spare Socks": { desc: "Strip poker buffer.", useHint: "Burn to avoid one forfeit.", targetHint: "Target: Strip Poker side pot.", riskHint: "Single-use item." },
-  "RA Whistle": { desc: "Fake authority tool.", useHint: "Best in Dorms to reduce Luigi pressure.", targetHint: "Target: Luigi pressure in residential lanes.", riskHint: "Using at Frat escalates fast." },
-  "Lace Undies": { desc: "Sorority contraband.", useHint: "Top Thunderhead trade item.", targetHint: "Target: Thunderhead in Tunnel.", riskHint: "Getting caught means a ban." },
-  "Sorority Mascara": { desc: "Sorority contraband.", useHint: "Valid Thunderhead trade item.", targetHint: "Target: Thunderhead in Tunnel.", riskHint: "Theft can trigger ejection + ban." },
-  "Sorority Composite": { desc: "Sorority contraband.", useHint: "Valid Thunderhead trade item.", targetHint: "Target: Thunderhead in Tunnel.", riskHint: "High social penalty if caught." },
-  "Hairbrush": { desc: "Low-value filler.", useHint: "Not valid for Thunderhead trade.", riskHint: "Bad trade wastes time." },
-  "Warm Beer": { desc: "Mix base item.", useHint: "Use where Sonic is present, or consume it in a mix recipe.", targetHint: "Target: Sonic at current location or mix recipes.", riskHint: "Mixing consumes Warm Beer." },
-  "Super Dean Beans": { desc: "Volatile ingredient.", useHint: "Mix with Warm Beer for Turbo Sludge.", targetHint: "Target: mix path in Dorm Room.", riskHint: "Mixing consumes ingredients and can backfire later." },
-  "Expired Energy Shot": { desc: "High-variance stim.", useHint: "Use only when gambling.", targetHint: "Target: Sonic at current location.", riskHint: "Can lower progress and raise pressure." },
-  "Glitter Flask": { desc: "Mix container.", useHint: "Needed for Glitter Bomb Brew.", targetHint: "Target: mix path.", riskHint: "No direct value alone." },
-  "Glitter Bomb Brew": { desc: "Chaotic mixed drink.", useHint: "Use where Sonic is present for swingy gain.", targetHint: "Target: Sonic at current location.", riskHint: "Can spike Dean warning." },
-  "Turbo Sludge": { desc: "Heavy mixed brew.", useHint: "Big spike attempt where Sonic is present.", targetHint: "Target: Sonic at current location.", riskHint: "Big backfire risk." },
-  "Campus Map": { desc: "Route intel.", useHint: "Use to reveal search lanes.", targetHint: "Target: route planning.", riskHint: "Costs time to use." },
-  "Gate Stamp": { desc: "Gate credential.", useHint: "Use at Stadium; better with Student ID.", riskHint: "Without ID, can add Dean warning." },
-  "Security Schedule": { desc: "Guard timing intel.", useHint: "Use at Stadium for gate timing or in Dorm Room to sell Sonic a VIP window.", targetHint: "Target: Sonic in Dorm Room or gate timing at Stadium.", riskHint: "Without Student ID, the VIP bluff backfires." },
-  "Mystery Meat": { desc: "Cafeteria wildcard.", useHint: "Use on Sonic where present.", riskHint: "Can help or backfire." }
-};
 const ITEM_ICONS: Partial<Record<string, string>> = {
   "Student ID": studentIdIcon,
   "Dean Whiskey": whiskeyIcon,
@@ -1081,13 +1053,22 @@ function App() {
   const isResolved = Boolean(state?.phase === "resolved");
   const beerThrowsTotal = activeMode.throws;
   const beerThrowsUsed = Math.max(0, beerThrowsTotal - beerThrowsLeft);
-  const engagedNpc = activeNpc;
+  const presentNpcs = useMemo(() => presentNpcsRaw, [presentNpcsRaw]);
   const activeDialogueSession = state?.dialogue.session;
-  const sessionForEngagedNpc = engagedNpc && activeDialogueSession?.npcId === engagedNpc
+  const conversationContract = useMemo(
+    () => deriveConversationContract({
+      presentNpcs,
+      activeNpc,
+      session: activeDialogueSession
+    }),
+    [activeDialogueSession, activeNpc, presentNpcs]
+  );
+  const engagedNpc = conversationContract.conversationNpcId;
+  const sessionForEngagedNpc = engagedNpc && activeDialogueSession?.npcId === engagedNpc && conversationContract.sessionIsUsable
     ? activeDialogueSession
     : null;
   const isQuestionGateSession = sessionForEngagedNpc?.mode === "question_gate";
-  const sessionAwaitingPlayer = sessionForEngagedNpc?.status === "awaiting_player";
+  const sessionAwaitingPlayer = conversationContract.shouldShowResponseControls;
   const sessionCompleted = sessionForEngagedNpc?.status === "completed";
   const replyPanelLabel = isQuestionGateSession ? "Answer" : "Tone";
   const dialogueInteractionHint = isQuestionGateSession && sessionAwaitingPlayer
@@ -1095,8 +1076,7 @@ function App() {
     : "";
   const dialogueTurnCount = state?.dialogue.turns.length ?? 0;
   const playerLocationForScroll = state?.player.location ?? null;
-  const presentNpcs = useMemo(() => presentNpcsRaw, [presentNpcsRaw]);
-  const leadSceneNpc = presentNpcs[0] ?? null;
+  const leadSceneNpc = conversationContract.leadNpcId;
   const leadSceneNpcLabel = leadSceneNpc ? titleCase(leadSceneNpc) : "";
   const leadSceneNpcVerb = leadSceneNpc ? npcBeVerb(leadSceneNpc) : "is";
   const scenePresenceState = !leadSceneNpc
@@ -2720,14 +2700,19 @@ function App() {
   }
 
   const exits = locationRecord?.exits ?? [];
-  const popupNpcId: NpcId | null = engagedNpc ?? leadSceneNpc;
+  const popupNpcId: NpcId | null = engagedNpc;
   const latestNpcTurn = findLatestNpcTurnForPopup(
     state.dialogue.turns,
     state.player.location,
     popupNpcId,
     activeNpcFocusAtMs
   );
-  const popupTyping = Boolean(engagedNpc && isAwaitingNpcReply);
+  const popupTyping = Boolean(popupNpcId && isAwaitingNpcReply);
+  const shouldUseDialogueTurnText = Boolean(
+    popupNpcId
+    && conversationContract.sessionIsUsable
+    && activeDialogueSession?.npcId === popupNpcId
+  );
   const popupDisplaySpeaker = sanitizePopupSpeaker(
     popupNpcId,
     latestNpcTurn?.displaySpeaker ?? (popupNpcId ? defaultDialogueSpeaker(popupNpcId) : "")
@@ -2740,7 +2725,11 @@ function App() {
     : "";
   const popupDialogueText = popupTyping
     ? ""
-    : stripLeadingSpeakerNoise(popupNpcId, popupDisplaySpeaker, latestNpcTurn?.text ?? popupFallbackLine);
+    : stripLeadingSpeakerNoise(
+      popupNpcId,
+      popupDisplaySpeaker,
+      shouldUseDialogueTurnText ? (latestNpcTurn?.text ?? popupFallbackLine) : popupFallbackLine
+    );
   const popupPoseState = latestNpcTurn?.poseKey ?? "neutral";
   const popupCharacterImage = popupNpcId && content
     ? resolveCharacterImage(content.assetManifest, popupNpcId, popupPoseState, popupDisplaySpeaker)
@@ -2918,6 +2907,16 @@ function App() {
     : latestHintAgeSec < 60
       ? `${latestHintAgeSec}s ago`
       : `${Math.floor(latestHintAgeSec / 60)}m ago`;
+  const dialogueRepeatEvents = state.world.events.filter((entry) => entry.startsWith("telemetry:dialogue-repeat:"));
+  const dialogueDiversifiedEvents = state.world.events.filter((entry) => entry.startsWith("telemetry:dialogue-diversified:"));
+  const dialogueRepeatByNpc = useMemo(() => {
+    const byNpc: Record<string, number> = {};
+    dialogueRepeatEvents.forEach((entry) => {
+      const [, , npcRaw = "unknown"] = entry.split(":");
+      byNpc[npcRaw] = (byNpc[npcRaw] ?? 0) + 1;
+    });
+    return byNpc;
+  }, [dialogueRepeatEvents]);
 
   const routeActionButtons: ActionButtonDef[] = [];
   const unlocks = state.world.actionUnlocks;
@@ -3244,6 +3243,15 @@ function App() {
       });
     });
   }
+  if (state.player.inventory.includes("Frat Bong")) {
+    routeActionButtons.push({
+      key: "USE_FRAT_BONG",
+      label: "Offer Frat Bong",
+      action: { type: "USE_FRAT_BONG" },
+      priority: sonicPresentAtCurrentLocation ? 82 : 22,
+      badge: sonicPresentAtCurrentLocation ? "Distract" : "Need Sonic"
+    });
+  }
   if (state.player.location === "stadium" && (unlocks.stadiumEntry || state.sonic.following)) {
     routeActionButtons.push({
       key: "STADIUM_ENTRY",
@@ -3327,6 +3335,7 @@ function App() {
   const showRecommendationStrip = false;
   const riskyKeys = new Set([
     "USE_FURRY_HANDCUFFS",
+    "USE_FRAT_BONG",
     "USE_SUPER_DEAN_BEANS",
     "USE_EXPIRED_ENERGY_SHOT",
     "USE_WARM_BEER",
@@ -3363,6 +3372,7 @@ function App() {
     { test: (item) => item === "Dean Whiskey", match: (action) => action.action.type === "GIVE_WHISKEY" },
     { test: (item) => item === "Asswine", match: (action) => action.action.type === "GIVE_ASSWINE" },
     { test: (item) => item === "Furry Handcuffs", match: (action) => action.key.startsWith("USE_ITEM_FURRY_HANDCUFFS_") },
+    { test: (item) => item === "Frat Bong", match: (action) => action.action.type === "USE_FRAT_BONG" },
     { test: (item) => item === "Warm Beer", match: (action) => action.action.type === "USE_WARM_BEER" || action.action.type === "MIX_GLITTER_WARM_BEER" || action.action.type === "MIX_BEANS_WARM_BEER" },
     { test: (item) => item === "Super Dean Beans", match: (action) => action.action.type === "USE_SUPER_DEAN_BEANS" || action.action.type === "MIX_BEANS_WARM_BEER" },
     { test: (item) => item === "Expired Energy Shot", match: (action) => action.action.type === "USE_EXPIRED_ENERGY_SHOT" },
@@ -3708,6 +3718,19 @@ function App() {
                     </button>
                   </div>
                   <p className="menu-inline-copy muted">Use logs to compare route consistency and blockers across runs.</p>
+                  <div className="status-note-card">
+                    <h3>Dialogue freshness telemetry</h3>
+                    <div className="status-note-body">
+                      <p>Repeat detections: {dialogueRepeatEvents.length} • Diversified replies: {dialogueDiversifiedEvents.length}</p>
+                      <p>
+                        {Object.keys(dialogueRepeatByNpc).length > 0
+                          ? `By NPC: ${Object.entries(dialogueRepeatByNpc)
+                            .map(([npc, count]) => `${titleCase(npc)} ${count}`)
+                            .join(" • ")}`
+                          : "By NPC: none"}
+                      </p>
+                    </div>
+                  </div>
                   {latestPlaytestTuning && (
                     <div className="status-note-card">
                       <h3>Latest {latestPlaytestTuning.sampleSize}-run tuning snapshot</h3>
@@ -4468,7 +4491,7 @@ function App() {
                   setPlayerInput("");
                   setNotice(null);
                   openLandingPage();
-                }}>File New Run</button>
+                }}>Re-Enroll</button>
               </>
             ) : (
               <>

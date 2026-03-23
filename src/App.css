@@ -1396,34 +1396,37 @@ button:disabled {
 }
 
 .official-notice-card {
-  border-color: rgba(192, 153, 74, 0.9);
-  background:
-    linear-gradient(180deg, rgba(248, 242, 224, 0.96), rgba(236, 225, 198, 0.96)),
+  --modal-bg: linear-gradient(180deg, rgba(248, 242, 224, 0.96), rgba(236, 225, 198, 0.96)),
     repeating-linear-gradient(180deg, rgba(110, 86, 38, 0.08) 0, rgba(110, 86, 38, 0.08) 1px, transparent 1px, transparent 28px);
-  color: #2a1f11;
+  --modal-fg: #1e150a;
+  --modal-heading: #352815;
+  --modal-muted: #5b4522;
+  border-color: rgba(192, 153, 74, 0.9);
 }
 
 .status-note-card {
   text-align: center;
-  color: #f4f8ff;
+  --modal-fg: #f4f8ff;
+  --modal-heading: #fff1bb;
+  --modal-muted: rgba(230, 235, 255, 0.9);
 }
 
 .status-note-card h3 {
   margin: 0;
-  color: #fff1bb;
 }
 
 .status-note-body {
   margin: 0;
-  color: #f7fbff;
   line-height: 1.45;
   font-size: 15px;
 }
 
 .mission-complete-card {
-  background: linear-gradient(180deg, rgba(24, 32, 92, 0.96), rgba(14, 20, 61, 0.96));
+  --modal-bg: linear-gradient(180deg, rgba(24, 32, 92, 0.96), rgba(14, 20, 61, 0.96));
+  --modal-fg: #f3f8ff;
+  --modal-heading: #f8fbff;
+  --modal-muted: #dce8ff;
   border-color: rgba(255, 210, 74, 0.78);
-  color: #f3f8ff;
 }
 
 .mission-complete-head {
@@ -1432,16 +1435,15 @@ button:disabled {
 }
 
 .mission-complete-card .official-school {
-  color: #ffefb2;
+  color: var(--modal-heading);
 }
 
 .mission-complete-card .official-dept {
-  color: #dce8ff;
+  color: var(--modal-muted);
 }
 
 .mission-complete-card h2 {
   margin: 4px 0 0;
-  color: #f8fbff;
 }
 
 .mission-complete-summary {
@@ -1456,7 +1458,7 @@ button:disabled {
 
 .mission-complete-summary p {
   margin: 0;
-  color: #eaf1ff;
+  color: var(--modal-fg);
   font-size: 13px;
 }
 
@@ -1471,7 +1473,7 @@ button:disabled {
 .mission-complete-reel h3 {
   margin: 0 0 4px;
   font-size: 14px;
-  color: #ffefb2;
+  color: var(--modal-heading);
 }
 
 .official-letterhead {
@@ -1484,7 +1486,7 @@ button:disabled {
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.02em;
-  color: #3b2d16;
+  color: var(--modal-heading);
 }
 
 .official-dept {
@@ -1492,16 +1494,15 @@ button:disabled {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #5b4522;
+  color: var(--modal-muted);
 }
 
 .official-notice-card h2 {
   margin: 4px 0 0;
-  color: #352815;
 }
 
 .official-body {
-  color: #1e150a;
+  color: var(--modal-fg);
   line-height: 1.5;
 }
 
@@ -1592,12 +1593,16 @@ button:disabled {
 }
 
 .modal-card {
+  --modal-bg: var(--surface-card);
+  --modal-fg: #f3f8ff;
+  --modal-heading: #fff1bb;
+  --modal-muted: rgba(230, 235, 255, 0.9);
   width: min(560px, calc(100% - 8px));
   max-height: 90vh;
   overflow: auto;
   box-sizing: border-box;
   margin-inline: auto;
-  background: var(--surface-card);
+  background: var(--modal-bg);
   border: 1px solid rgba(255, 210, 74, 0.86);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
@@ -1605,15 +1610,22 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  color: var(--modal-fg);
   animation: modalCardIn var(--motion-panel) var(--ease-standard) both;
 }
 
 .modal-card p {
-  color: #f3f8ff;
+  color: var(--modal-fg);
 }
 
-.official-notice-card p {
-  color: #1e150a;
+.modal-card h2,
+.modal-card h3 {
+  color: var(--modal-heading);
+}
+
+.modal-card .muted {
+  color: var(--modal-muted);
+  opacity: 1;
 }
 
 .modal-card.action-sheet-card,

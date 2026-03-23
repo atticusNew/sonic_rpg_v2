@@ -81,6 +81,7 @@ export interface PlayerAction {
     | "SEARCH_STADIUM"
     | "USE_CAMPUS_MAP"
     | "USE_GATE_STAMP"
+    | "USE_FRAT_BONG"
     | "USE_MYSTERY_MEAT"
     | "USE_SECURITY_SCHEDULE"
     | "USE_RA_WHISTLE"
