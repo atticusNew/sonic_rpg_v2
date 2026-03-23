@@ -1043,6 +1043,21 @@ p, li, span, input, button {
   grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
 }
 
+.action-grid button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.action-pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menu-inline-copy {
   margin: 0;
 }
@@ -1155,7 +1170,7 @@ p, li, span, input, button {
 }
 
 .action-pill-label {
-  margin-left: 8px;
+  margin-left: 0;
   padding: 1px 7px;
   border-radius: 999px;
   font-size: 10px;
@@ -1491,20 +1506,18 @@ button:disabled {
 }
 
 .top-toast {
-  position: fixed;
-  left: 50%;
-  top: max(14px, env(safe-area-inset-top) + 6px);
-  transform: translateX(-50%);
-  z-index: 75;
+  position: relative;
+  margin: 6px auto 0;
   border-radius: 12px;
   padding: 9px 12px;
   font-size: 12px;
-  max-width: min(88vw, 560px);
+  max-width: min(92vw, 620px);
   text-align: center;
   color: #f5fbff;
   background: rgba(8, 13, 42, 0.88);
   border: 1px solid rgba(156, 182, 255, 0.5);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.34);
+  pointer-events: none;
 }
 
 .top-toast-rumor {
@@ -2811,6 +2824,17 @@ button:disabled {
   .clock-pill {
     min-height: 40px;
     font-size: 12px;
+  }
+
+  .action-grid button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 4px;
+  }
+
+  .action-pill-text {
+    white-space: normal;
+    text-align: center;
   }
 
   .search-loot-card {

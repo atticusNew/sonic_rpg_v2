@@ -107,6 +107,14 @@ function defaultDialogueSpeaker(npcId: NpcId): string {
   return titleCase(npcId);
 }
 
+function isGroupNpc(npcId: NpcId): boolean {
+  return npcId === "frat_boys" || npcId === "sorority_girls";
+}
+
+function npcBeVerb(npcId: NpcId): "is" | "are" {
+  return isGroupNpc(npcId) ? "are" : "is";
+}
+
 function sanitizePopupSpeaker(npcId: NpcId | null, rawSpeaker: string): string {
   const speaker = String(rawSpeaker || "").trim();
   if (!npcId) return speaker;
@@ -646,15 +654,17 @@ function findLatestNpcTurnForPopup(
   focusedAfterMs: number
 ) {
   if (!engagedNpc) return undefined;
+  let fallbackTurn: GameStateData["dialogue"]["turns"][number] | undefined;
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
     if (turn.speaker === "You" || turn.npcId !== engagedNpc || turn.text.trim() === "...") continue;
     if (turn.locationId && turn.locationId !== locationId) continue;
+    fallbackTurn = fallbackTurn ?? turn;
     if (!focusedAfterMs) return turn;
     const createdAtMs = turn.createdAt ? Date.parse(turn.createdAt) : 0;
     if (createdAtMs >= focusedAfterMs) return turn;
   }
-  return undefined;
+  return fallbackTurn;
 }
 
 function App() {
@@ -1087,6 +1097,8 @@ function App() {
   const playerLocationForScroll = state?.player.location ?? null;
   const presentNpcs = useMemo(() => presentNpcsRaw, [presentNpcsRaw]);
   const leadSceneNpc = presentNpcs[0] ?? null;
+  const leadSceneNpcLabel = leadSceneNpc ? titleCase(leadSceneNpc) : "";
+  const leadSceneNpcVerb = leadSceneNpc ? npcBeVerb(leadSceneNpc) : "is";
   const scenePresenceState = !leadSceneNpc
     ? "empty"
     : engagedNpc === leadSceneNpc && isAwaitingNpcReply
@@ -1099,14 +1111,14 @@ function App() {
   const scenePresenceLabel = !leadSceneNpc
     ? "No one is here right now."
     : scenePresenceState === "replying"
-      ? `${titleCase(leadSceneNpc)} is responding...`
+      ? `${leadSceneNpcLabel} ${leadSceneNpcVerb} responding...`
       : scenePresenceState === "awaiting_player"
         ? (isQuestionGateSession
-          ? `${titleCase(leadSceneNpc)} asked a question. Choose an answer.`
-          : `${titleCase(leadSceneNpc)} is waiting for your tone reply.`)
+          ? `${leadSceneNpcLabel} asked a question. Choose an answer.`
+          : `${leadSceneNpcLabel} ${leadSceneNpcVerb} waiting for your tone reply.`)
         : scenePresenceState === "completed"
           ? "Conversation complete. Choose your next move."
-          : `${titleCase(leadSceneNpc)} is here.`;
+          : `${leadSceneNpcLabel} ${leadSceneNpcVerb} here.`;
   const clockText = `${Math.floor((state?.timer.remainingSec ?? 0) / 60).toString().padStart(2, "0")}:${((state?.timer.remainingSec ?? 0) % 60).toString().padStart(2, "0")}`;
   const submitQuickDialogueTone = useCallback(async (text: string, tone: DialogueTone) => {
     if (!engagedNpc || isResolved || isAwaitingNpcReply) return;
@@ -2708,21 +2720,27 @@ function App() {
   }
 
   const exits = locationRecord?.exits ?? [];
+  const popupNpcId: NpcId | null = engagedNpc ?? leadSceneNpc;
   const latestNpcTurn = findLatestNpcTurnForPopup(
     state.dialogue.turns,
     state.player.location,
-    engagedNpc,
+    popupNpcId,
     activeNpcFocusAtMs
   );
-  const popupNpcId: NpcId | null = engagedNpc;
   const popupTyping = Boolean(engagedNpc && isAwaitingNpcReply);
   const popupDisplaySpeaker = sanitizePopupSpeaker(
     popupNpcId,
     latestNpcTurn?.displaySpeaker ?? (popupNpcId ? defaultDialogueSpeaker(popupNpcId) : "")
   );
+  const popupPresenceSubject = popupNpcId
+    ? (isGroupNpc(popupNpcId) ? titleCase(popupNpcId) : popupDisplaySpeaker)
+    : "";
+  const popupFallbackLine = popupNpcId
+    ? `${popupPresenceSubject} ${npcBeVerb(popupNpcId)} here, clocking your next move.`
+    : "";
   const popupDialogueText = popupTyping
     ? ""
-    : stripLeadingSpeakerNoise(popupNpcId, popupDisplaySpeaker, latestNpcTurn?.text ?? "");
+    : stripLeadingSpeakerNoise(popupNpcId, popupDisplaySpeaker, latestNpcTurn?.text ?? popupFallbackLine);
   const popupPoseState = latestNpcTurn?.poseKey ?? "neutral";
   const popupCharacterImage = popupNpcId && content
     ? resolveCharacterImage(content.assetManifest, popupNpcId, popupPoseState, popupDisplaySpeaker)
@@ -2730,13 +2748,20 @@ function App() {
   const landingBackgroundImage = resolveBackgroundImage(content.assetManifest, "landing_page");
   const landingSignImage = resolveBackgroundImage(content.assetManifest, "landing_page_sign");
   const kickoutModalImage = resolveCharacterImage(content.assetManifest, "expulsion_card", "default");
-  const isKickoutFailure = state.fail.hardFailed && /(expel|kicked?\s+out|kick\s*out)/i.test(state.fail.reason);
-  const isDropoutFailure = state.fail.hardFailed && /(drop\s*out|embarass|embarrass)/i.test(state.fail.reason);
-  const shouldShowExpelCard = isKickoutFailure || isDropoutFailure;
+  const failureReason = state.fail.reason || "";
+  const isKickoutFailure = state.fail.hardFailed && /(expel|kicked?\s+out|kick\s*out)/i.test(failureReason);
+  const isDropoutFailure = state.fail.hardFailed && /(drop\s*out|embarass|embarrass)/i.test(failureReason);
+  const isTimeoutFailure = state.fail.hardFailed && /(time expired|clock hit zero|not college material|grown up)/i.test(failureReason);
+  const isExposureFailure = state.fail.hardFailed && /(indecent exposure|hustled|naked|conduct violation)/i.test(failureReason);
+  const shouldShowExpelCard = isKickoutFailure || isDropoutFailure || isTimeoutFailure || isExposureFailure;
+  const resolvedFailureHeading = isTimeoutFailure
+    ? "Dean's Final Notice"
+    : isExposureFailure
+      ? "Conduct Violation Notice"
+      : "Expulsion Notice";
   const soggyFratImage = resolveCharacterImage(content.assetManifest, "frat_boys", "neutral", "Diesel");
   const shouldShowDialoguePopup = Boolean(
-    engagedNpc
-    && popupNpcId
+    popupNpcId
     && (popupDialogueText || popupTyping)
     && !orientationIntroOpen
     && !starterRoutePanelOpen
@@ -3404,6 +3429,11 @@ function App() {
       <section className={`npc-presence-status npc-presence-status-${scenePresenceState}`} aria-live="polite">
         <p>{scenePresenceLabel}</p>
       </section>
+      {topToast && !suppressTopToast && (
+        <aside className={`top-toast top-toast-${topToast.kind}`} aria-live="polite">
+          {topToast.text}
+        </aside>
+      )}
 
       {showCompactMissionBar && (
         <section className="mission-compact-bar" aria-label="Mission status">
@@ -3522,7 +3552,8 @@ function App() {
                   await runAction(item.action);
                 }}
               >
-                {actionLabel} {item.badge ? `(${item.badge})` : ""}
+                <span className="action-pill-text">{actionLabel}</span>
+                {item.badge ? <span className="action-pill-label">{item.badge}</span> : null}
               </button>
               );
             })}
@@ -3843,7 +3874,7 @@ function App() {
                           }
                         }}
                       >
-                        {item.label}
+                        <span className="action-pill-text">{item.label}</span>
                         {item.badge ? <span className="action-pill-label">{item.badge}</span> : null}
                       </button>
                     ))}
@@ -4371,12 +4402,6 @@ function App() {
         </section>
       )}
 
-      {topToast && !suppressTopToast && (
-        <aside className={`top-toast top-toast-${topToast.kind}`} aria-live="polite">
-          {topToast.text}
-        </aside>
-      )}
-
       {orientationIntroOpen && (
         <section className="modal-overlay">
           <article className="modal-card orientation-video-card">
@@ -4409,7 +4434,7 @@ function App() {
                 <div className={state.fail.hardFailed ? "official-letterhead" : "mission-complete-head"}>
                   <p className="official-school">Console University</p>
                   <p className="official-dept">Office of Dean Cain</p>
-                  <h2>{state.fail.hardFailed ? "Expulsion Notice" : "Mission Completion Record"}</h2>
+                  <h2>{state.fail.hardFailed ? resolvedFailureHeading : "Mission Completion Record"}</h2>
                 </div>
                 {shouldShowExpelCard && (
                   <img

@@ -46,11 +46,17 @@ export class ScriptedDialogueService {
       ],
       frat_boys: [
         "Diesel: House rule one, no spectators. Bring heat or bring snacks.",
-        "Provelony Toney: Welcome to Frat. Reputation in, excuses out."
+        "Provelony Toney: Welcome to Frat. Reputation in, excuses out.",
+        "Diesel: If your plan is vibes-only, you're already losing.",
+        "Provelony Toney: Say less, swing cups, make headlines.",
+        "Diesel: We measure people in outcomes, not introductions."
       ],
       sorority_girls: [
         "Apple: Cute entrance. What's your angle?",
-        "Fedora: Confidence acceptable, judgment still pending."
+        "Fedora: Confidence acceptable, judgment still pending.",
+        "Apple: You get one first impression. Spend it better than that.",
+        "Fedora: We respect bold, not sloppy. Choose one.",
+        "Apple: If you are here for drama, at least make it premium."
       ],
       thunderhead: [
         "Tunnel desk is open. You here to trade or hear an inadvisable confession?",
@@ -99,11 +105,17 @@ export class ScriptedDialogueService {
       ],
       frat_boys: [
         "Diesel: Back in the house. Momentum talks, posture walks.",
-        "Provelony Toney: Return visit logged. Performance still pending."
+        "Provelony Toney: Return visit logged. Performance still pending.",
+        "Diesel: You're back. Great. Win something this time.",
+        "Provelony Toney: Familiar face, same pressure.",
+        "Diesel: Return visit accepted. Excuses still rejected."
       ],
       sorority_girls: [
         "Apple: You came back. That's either confidence or a warning sign.",
-        "Fedora: Return visit noted. Keep it sharp."
+        "Fedora: Return visit noted. Keep it sharp.",
+        "Apple: Round two. Try not to waste everyone's eyeliner.",
+        "Fedora: You're back, so be interesting quickly.",
+        "Apple: Repeat appearance approved. Repeat mistakes not approved."
       ],
       thunderhead: [
         "You came back. Great, my poor judgment feels seen.",

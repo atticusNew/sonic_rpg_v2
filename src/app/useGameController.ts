@@ -389,6 +389,57 @@ function clampDialogueForDisplay(npcId: NpcId, rawText: string): string {
   return /[.!?]$/.test(hard) ? hard : `${hard}.`;
 }
 
+function normalizeDialogueKey(rawText: string): string {
+  return String(rawText || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function diversifyNpcReply(state: GameStateData, npcId: NpcId, rawText: string, seedTag: string): string {
+  const text = String(rawText || "").replace(/\s+/g, " ").trim();
+  if (!text) return text;
+  const normalized = normalizeDialogueKey(text);
+  if (!normalized) return text;
+  const recentNormalized = state.dialogue.turns
+    .slice(-10)
+    .filter((turn) => turn.npcId === npcId && turn.speaker !== "You")
+    .map((turn) => normalizeDialogueKey(turn.text))
+    .filter(Boolean);
+  const repeatCount = recentNormalized.filter((line) => line === normalized).length;
+  if (repeatCount === 0) return text;
+
+  const rerollPoolByNpc: Partial<Record<NpcId, string[]>> = {
+    frat_boys: [
+      "Diesel: You're repeating yourself. Show results, not reruns.",
+      "Provelony Toney: New line, same pressure. Win something.",
+      "Provelony Toney: We heard that already. Bring a better play."
+    ],
+    sorority_girls: [
+      "Apple: Repeat line? Cute. Try a fresh angle.",
+      "Fedora: Recycled dialogue is not a personality.",
+      "Apple: New move, same room. Keep it interesting."
+    ]
+  };
+  const rerollPool = rerollPoolByNpc[npcId];
+  if (rerollPool && rerollPool.length > 0) {
+    return pickDialogueVariant(
+      rerollPool,
+      `${state.meta.seed}:${state.timer.remainingSec}:${state.player.location}:${npcId}:${seedTag}:${repeatCount}`
+    );
+  }
+
+  const suffix = pickDialogueVariant([
+    "Keep it moving before the clock buries this run.",
+    "New information only - we're past rehearsals.",
+    "Different angle, same mission: execute now.",
+    "Stay sharp and change pace."
+  ], `${state.meta.seed}:${state.timer.remainingSec}:${state.player.location}:${npcId}:${seedTag}:${repeatCount}`);
+  const base = text.replace(/\s*[.!?]\s*$/, "").trim();
+  return `${base}. ${suffix}`;
+}
+
 export function useGameController(): {
   state: GameStateData | null;
   content: ContentBundle | null;
@@ -611,7 +662,7 @@ export function useGameController(): {
         enforceRuntimeCaps(state);
         if (state.timer.remainingSec === 0) {
           state.fail.hardFailed = true;
-          state.fail.reason = "Time expired before Stadium success.";
+          state.fail.reason = "Dean's car peels up as the clock hits zero. You're not college material. Come back when you're grown up.";
           if (machine) {
             safeTransition(machine, state, "resolved", "TIMER_EXPIRED");
           } else {
@@ -1696,7 +1747,11 @@ export function useGameController(): {
             state.world.restrictions.sororityBanned = true;
             state.player.location = "quad";
             state.world.visitCounts.quad = (state.world.visitCounts.quad ?? 0) + 1;
-            result = { ok: false, message: "Table tosses you out after the final stake. You are banned from Sorority for this run." };
+            state.fail.hardFailed = true;
+            state.fail.reason = "You got hustled, then busted for indecent exposure. Come back when you're smarter.";
+            state.world.events.push("Rumor update: Sorority tossed you to Quad and campus security booked you for indecent exposure.");
+            safeTransition(machine, state, "resolved", "PLAY_STRIP_POKER_ROUND indecent exposure fail");
+            result = { ok: false, message: state.fail.reason, gameOver: true };
             return;
           }
           result = { ok: true, message: `Quick hand done (-40s). You lose this one and forfeit ${forfeited}.` };
@@ -2041,25 +2096,23 @@ export function useGameController(): {
             state.world.actionUnlocks.searchDorms = true;
           }
           const encounterCount = state.dialogue.encounterCountByNpc[action.npcId] ?? 0;
-          const hasRecentNpcLine = state.dialogue.turns
-            .slice(-2)
-            .some((turn) => String(turn.npcId || "") === action.npcId);
           const questionGate = resolveQuestionGate(state, action.npcId);
-          const shouldEmitOpeningLine = !action.auto || !hasRecentNpcLine;
-          if (shouldEmitOpeningLine) {
-            const greet = questionGate
-              ? { text: questionGate.opener, source: "scripted" as const }
-              : dialogue.greeting(action.npcId, encounterCount, `${state.meta.seed}:${state.timer.remainingSec}:tap-open`);
-            const openingTurns = parseDisplayTurns(action.npcId, greet.text, defaultDialogueSpeaker(action.npcId));
-            openingTurns.forEach((turn) => pushDialogueTurn(state, createDialogueTurn(action.npcId, turn.text, state, {
-              npcId: action.npcId,
-              displaySpeaker: turn.displaySpeaker ?? defaultDialogueSpeaker(action.npcId),
-              poseKey: inferNpcPoseKey(action.npcId, turn.text, state, "OPENING_LINE")
-            })));
-            updateNpcMemory(state, action.npcId, greet.text);
-            state.dialogue.source = greet.source;
-            state.quality.sourceCounts[greet.source] = (state.quality.sourceCounts[greet.source] ?? 0) + 1;
-          }
+          const greet = questionGate
+            ? { text: questionGate.opener, source: "scripted" as const }
+            : dialogue.greeting(action.npcId, encounterCount, `${state.meta.seed}:${state.timer.remainingSec}:tap-open`);
+          const openingText = questionGate
+            ? greet.text
+            : diversifyNpcReply(state, action.npcId, greet.text, "opening-line");
+          const clampedOpeningText = clampDialogueForDisplay(action.npcId, openingText);
+          const openingTurns = parseDisplayTurns(action.npcId, clampedOpeningText, defaultDialogueSpeaker(action.npcId));
+          openingTurns.forEach((turn) => pushDialogueTurn(state, createDialogueTurn(action.npcId, turn.text, state, {
+            npcId: action.npcId,
+            displaySpeaker: turn.displaySpeaker ?? defaultDialogueSpeaker(action.npcId),
+            poseKey: inferNpcPoseKey(action.npcId, turn.text, state, "OPENING_LINE")
+          })));
+          updateNpcMemory(state, action.npcId, clampedOpeningText);
+          state.dialogue.source = greet.source;
+          state.quality.sourceCounts[greet.source] = (state.quality.sourceCounts[greet.source] ?? 0) + 1;
           state.dialogue.session = {
             npcId: action.npcId,
             status: "awaiting_player",
@@ -2422,7 +2475,8 @@ export function useGameController(): {
         const reply = await dialogue.reply(reaction.npcId, reaction.input, latest);
         store.patch((state) => {
           if (reaction.resetTurns) state.dialogue.turns = [];
-          const clampedText = clampDialogueForDisplay(reaction.npcId, reply.text);
+          const variedText = diversifyNpcReply(state, reaction.npcId, reply.text, "system-reaction");
+          const clampedText = clampDialogueForDisplay(reaction.npcId, variedText);
           if (reaction.npcId === "sorority_girls" && clampedText.length < reply.text.length) {
             state.world.events.push("telemetry:sorority-trimmed");
           }
@@ -2434,7 +2488,7 @@ export function useGameController(): {
           })));
           state.dialogue.source = reply.source;
           state.quality.sourceCounts[reply.source] = (state.quality.sourceCounts[reply.source] ?? 0) + 1;
-          updateNpcMemory(state, reaction.npcId, reply.text);
+          updateNpcMemory(state, reaction.npcId, clampedText);
           ensureMissionIntakeConsistency(state);
           const world = director.updateWorld(state);
           state.world.intents = world.intents;
@@ -2475,7 +2529,8 @@ export function useGameController(): {
           state.dialogue.turns = state.dialogue.turns.filter((turn) => !(turn.createdAt === provisionalCreatedAt && turn.text === "..."));
         }
         state.dialogue.source = routed.source;
-        const clampedText = clampDialogueForDisplay(dialogueAction.npcId, routed.text);
+        const variedText = diversifyNpcReply(state, dialogueAction.npcId, routed.text, "dialogue-reply");
+        const clampedText = clampDialogueForDisplay(dialogueAction.npcId, variedText);
         if (dialogueAction.npcId === "sorority_girls" && clampedText.length < routed.text.length) {
           state.world.events.push("telemetry:sorority-trimmed");
         }
@@ -2486,7 +2541,7 @@ export function useGameController(): {
           poseKey: inferNpcPoseKey(dialogueAction.npcId, turn.text, state, routed.intent)
         })));
         state.quality.sourceCounts[routed.source] = (state.quality.sourceCounts[routed.source] ?? 0) + 1;
-        updateNpcMemory(state, dialogueAction.npcId, routed.text);
+        updateNpcMemory(state, dialogueAction.npcId, clampedText);
         ensureMissionIntakeConsistency(state);
         const world = director.updateWorld(state);
         state.world.intents = world.intents;
@@ -2501,7 +2556,7 @@ export function useGameController(): {
           result = { ok: false, message: routed.text, gameOver: true };
           return;
         }
-        result = { ok: true, message: routed.text };
+        result = { ok: true, message: clampedText };
       });
     }
 
