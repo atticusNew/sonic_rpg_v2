@@ -94,7 +94,7 @@ function ScenePanelComponent(props: Props) {
       )}
 
       <div className="scene-footer">
-        {engagedNpc && (
+        {engagedNpc && canSubmitReplies && dialogueQuickReplies.length > 0 && (
           <div className={`dialogue-choice-panel ${isQuestionMode ? "answer-mode" : ""}`}>
             <div className="dialogue-choice-header">
               <p className="dialogue-choice-label">{replyPanelLabel}</p>
@@ -106,25 +106,23 @@ function ScenePanelComponent(props: Props) {
                     : "Current • Unselected")}
               </p>
             </div>
-            {dialogueQuickReplies.length > 0 && (
-              <div className={`quick-reply-row ${isQuestionMode ? "quick-reply-row-answer" : ""}`} aria-label={isQuestionMode ? "Dialogue answer choices" : "Dialogue tone choices"}>
-                {dialogueQuickReplies.map((reply) => (
-                  <button
-                    key={reply.id}
-                    className={`quick-reply-btn quick-reply-btn-${reply.id} ${isQuestionMode ? "quick-reply-btn-answer" : ""} ${selectedTone === reply.id ? "quick-reply-btn-active" : ""}`}
-                    title={reply.text}
-                    aria-pressed={selectedTone === reply.id}
-                    disabled={!canSubmitReplies || isAwaitingNpcReply || isResolved}
-                    onClick={async () => {
-                      setToneSelection({ npcId: engagedNpc, tone: reply.id });
-                      await onSubmitQuickReply(reply.text, reply.id);
-                    }}
-                  >
-                    {reply.tone}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className={`quick-reply-row ${isQuestionMode ? "quick-reply-row-answer" : ""}`} aria-label={isQuestionMode ? "Dialogue answer choices" : "Dialogue tone choices"}>
+              {dialogueQuickReplies.map((reply) => (
+                <button
+                  key={reply.id}
+                  className={`quick-reply-btn quick-reply-btn-${reply.id} ${isQuestionMode ? "quick-reply-btn-answer" : ""} ${selectedTone === reply.id ? "quick-reply-btn-active" : ""}`}
+                  title={reply.text}
+                  aria-pressed={selectedTone === reply.id}
+                  disabled={!canSubmitReplies || isAwaitingNpcReply || isResolved}
+                  onClick={async () => {
+                    setToneSelection({ npcId: engagedNpc, tone: reply.id });
+                    await onSubmitQuickReply(reply.text, reply.id);
+                  }}
+                >
+                  {reply.tone}
+                </button>
+              ))}
+            </div>
             {interactionHint && (
               <p className="hint-inline">{interactionHint}</p>
             )}

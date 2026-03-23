@@ -1080,23 +1080,32 @@ function App() {
   const sessionAwaitingPlayer = sessionForEngagedNpc?.status === "awaiting_player";
   const sessionCompleted = sessionForEngagedNpc?.status === "completed";
   const replyPanelLabel = isQuestionGateSession ? "Answer" : "Tone";
-  const dialogueInteractionHint = sessionCompleted
-    ? "Interaction complete. Make your next move."
-    : isQuestionGateSession && sessionAwaitingPlayer
-      ? "Answer the NPC question to get a direct clue."
-      : "";
+  const dialogueInteractionHint = isQuestionGateSession && sessionAwaitingPlayer
+    ? "Answer the NPC question to get a direct clue."
+    : "";
   const dialogueTurnCount = state?.dialogue.turns.length ?? 0;
   const playerLocationForScroll = state?.player.location ?? null;
   const presentNpcs = useMemo(() => presentNpcsRaw, [presentNpcsRaw]);
   const leadSceneNpc = presentNpcs[0] ?? null;
+  const scenePresenceState = !leadSceneNpc
+    ? "empty"
+    : engagedNpc === leadSceneNpc && isAwaitingNpcReply
+      ? "replying"
+      : engagedNpc === leadSceneNpc && sessionAwaitingPlayer
+        ? "awaiting_player"
+        : sessionCompleted && engagedNpc === leadSceneNpc
+          ? "completed"
+          : "present";
   const scenePresenceLabel = !leadSceneNpc
     ? "No one is here right now."
-    : engagedNpc === leadSceneNpc && isAwaitingNpcReply
-      ? `${titleCase(leadSceneNpc)} is replying...`
-      : engagedNpc === leadSceneNpc && sessionAwaitingPlayer
-        ? `${titleCase(leadSceneNpc)} is waiting for your response.`
-        : sessionCompleted && engagedNpc === leadSceneNpc
-          ? `${titleCase(leadSceneNpc)} finished this exchange.`
+    : scenePresenceState === "replying"
+      ? `${titleCase(leadSceneNpc)} is responding...`
+      : scenePresenceState === "awaiting_player"
+        ? (isQuestionGateSession
+          ? `${titleCase(leadSceneNpc)} asked a question. Choose an answer.`
+          : `${titleCase(leadSceneNpc)} is waiting for your tone reply.`)
+        : scenePresenceState === "completed"
+          ? "Conversation complete. Choose your next move."
           : `${titleCase(leadSceneNpc)} is here.`;
   const clockText = `${Math.floor((state?.timer.remainingSec ?? 0) / 60).toString().padStart(2, "0")}:${((state?.timer.remainingSec ?? 0) % 60).toString().padStart(2, "0")}`;
   const submitQuickDialogueTone = useCallback(async (text: string, tone: DialogueTone) => {
@@ -1232,6 +1241,8 @@ function App() {
 
   useEffect(() => {
     if (!state || isResolved) return;
+    const hasPendingLocationTransition = prevLocationRef.current !== null && prevLocationRef.current !== state.player.location;
+    if (hasPendingLocationTransition) return;
     const leadNpc = leadSceneNpc;
     const signature = `${state.player.location}:${leadNpc ?? "none"}`;
     if (!leadNpc) {
@@ -1392,6 +1403,7 @@ function App() {
       return;
     }
     if (prevLocationRef.current !== current) {
+      lastAutoEncounterSignatureRef.current = "";
       setActiveNpc(null);
       setActiveNpcFocusAtMs(0);
       setPlayerInput("");
@@ -3389,7 +3401,7 @@ function App() {
         onSubmitQuickReply={submitQuickDialogueTone}
       />
 
-      <section className="npc-presence-status" aria-live="polite">
+      <section className={`npc-presence-status npc-presence-status-${scenePresenceState}`} aria-live="polite">
         <p>{scenePresenceLabel}</p>
       </section>
 

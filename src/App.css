@@ -450,6 +450,20 @@ p, li, span, input, button {
   color: rgba(224, 236, 255, 0.9);
 }
 
+.npc-presence-status.npc-presence-status-awaiting_player {
+  border-color: rgba(255, 210, 74, 0.46);
+  background: linear-gradient(180deg, rgba(58, 44, 14, 0.82), rgba(33, 26, 8, 0.82));
+}
+
+.npc-presence-status.npc-presence-status-replying {
+  border-color: rgba(155, 192, 255, 0.44);
+}
+
+.npc-presence-status.npc-presence-status-completed {
+  border-color: rgba(141, 224, 170, 0.42);
+  background: linear-gradient(180deg, rgba(17, 52, 35, 0.78), rgba(11, 34, 23, 0.78));
+}
+
 .presence-bar {
   margin-top: -2px;
   background: rgba(14, 17, 50, 0.78);
