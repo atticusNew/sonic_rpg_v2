@@ -2909,14 +2909,11 @@ function App() {
       : `${Math.floor(latestHintAgeSec / 60)}m ago`;
   const dialogueRepeatEvents = state.world.events.filter((entry) => entry.startsWith("telemetry:dialogue-repeat:"));
   const dialogueDiversifiedEvents = state.world.events.filter((entry) => entry.startsWith("telemetry:dialogue-diversified:"));
-  const dialogueRepeatByNpc = useMemo(() => {
-    const byNpc: Record<string, number> = {};
-    dialogueRepeatEvents.forEach((entry) => {
-      const [, , npcRaw = "unknown"] = entry.split(":");
-      byNpc[npcRaw] = (byNpc[npcRaw] ?? 0) + 1;
-    });
-    return byNpc;
-  }, [dialogueRepeatEvents]);
+  const dialogueRepeatByNpc: Record<string, number> = {};
+  dialogueRepeatEvents.forEach((entry) => {
+    const [, , npcRaw = "unknown"] = entry.split(":");
+    dialogueRepeatByNpc[npcRaw] = (dialogueRepeatByNpc[npcRaw] ?? 0) + 1;
+  });
 
   const routeActionButtons: ActionButtonDef[] = [];
   const unlocks = state.world.actionUnlocks;
